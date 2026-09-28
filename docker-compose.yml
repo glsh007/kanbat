@@ -1,0 +1,51 @@
+# Канбат на сервере в интернете: сайт + API + HTTPS.
+# Обычно запускается скриптом deploy/install.sh; вручную: заполните .env и выполните
+#   docker compose up -d --build
+services:
+  kanbat:
+    build:
+      context: .
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      # перед Канбатом ровно один прокси — Caddy
+      TRUST_PROXY: '1'
+    volumes:
+      # данные (кабинеты, обращения, БатФорум) — в папке data рядом с этим файлом
+      - ./data:/data
+    # наружу Канбат не смотрит — только через Caddy (HTTPS)
+    expose:
+      - '3000'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - kanbat
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN:?Укажите DOMAIN в файле .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # Своя модель на сервере (нужно ≥ 16 ГБ ОЗУ, лучше с видеокартой) — для закрытого контура:
+  # раскомментируйте, в .env укажите LLM_PROVIDER=ollama и OLLAMA_URL=http://ollama:11434,
+  # затем: docker compose exec ollama ollama pull qwen2.5:7b
+  # ollama:
+  #   image: ollama/ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama-models:/root/.ollama
+
+volumes:
+  caddy-data:
+  caddy-config:
+  # ollama-models:

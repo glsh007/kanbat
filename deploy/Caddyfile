@@ -1,0 +1,13 @@
+# Caddy — HTTPS для Канбата: сертификат Let's Encrypt получается и продлевается сам.
+# Домен — переменная DOMAIN из файла .env (например, kanbat.ru).
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy kanbat:3000 {
+		# ответы ИИ идут потоком (SSE) — отдаём сразу, без буфера
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

@@ -1,0 +1,312 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/onest';
+/* Засечный шрифт с кириллицей — для заголовков и ответов помощника (спокойный «книжный» тон) */
+@import '@fontsource-variable/source-serif-4/opsz.css';
+@import '@app/tokens/tokens.css';
+
+/* Тёмная тема включается атрибутом data-theme="dark" на <html> (его ставит ThemeProvider). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Tailwind знает только наши токены: стандартная палитра Tailwind отключена,
+ * поэтому классы вроде bg-red-500 просто не сгенерируются.
+ */
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --shadow-*: initial;
+}
+
+@theme inline {
+  /* поверхности */
+  --color-canvas: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--surface-sunken);
+  --color-inverse: var(--surface-inverse);
+  /* текст */
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-heading: var(--heading);
+  --color-on-inverse: var(--on-inverse);
+  /* действия */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-border: var(--primary-border);
+  --color-on-primary: var(--on-primary);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent-soft: var(--on-accent-soft);
+  /* линии */
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-focus: var(--focus);
+  --color-scrim: var(--scrim);
+  --color-column: var(--column);
+  --color-logo-primary: var(--logo-primary);
+  --color-logo-accent: var(--logo-accent);
+  /* градиент готовности */
+  --color-col-1: var(--col-1);
+  --color-col-2: var(--col-2);
+  --color-col-3: var(--col-3);
+  --color-col-4: var(--col-4);
+  --color-col-5: var(--col-5);
+  /* метки разделов */
+  --color-label-clay: var(--label-clay);
+  --color-label-kraft: var(--label-kraft);
+  --color-label-stone: var(--label-stone);
+  --color-label-slate: var(--label-slate);
+
+  --font-sans: 'Onest Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-serif: 'Source Serif 4 Variable', 'Georgia', 'Times New Roman', serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+
+  /* Скругления 12–16 px */
+  --radius-control: 12px;
+  --radius-card: 14px;
+  --radius-panel: 16px;
+
+  /* Мягкие «бумажные» тени */
+  --shadow-card: 0 1px 2px var(--shadow), 0 2px 8px var(--shadow);
+  --shadow-raised: 0 2px 4px var(--shadow), 0 8px 24px var(--shadow);
+
+  /* Анимации 200–400 мс */
+  --ease-paper: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 300ms var(--ease-paper),
+      color 300ms var(--ease-paper);
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: var(--heading);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Заголовки экранов — засечным шрифтом, как у «книжных» интерфейсов */
+  h1 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--fg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+   * Обои доски — как фон чата в мессенджерах: мягкий градиент из 4 точек
+   * и оригинальный контурный узор поверх. Узор — маска, цвет — токен --wallpaper-ink,
+   * поэтому в тёмной теме он перекрашивается сам.
+   */
+  .wallpaper {
+    background:
+      radial-gradient(ellipse at 0% 0%, var(--wallpaper-1), transparent 70%),
+      radial-gradient(ellipse at 100% 0%, var(--wallpaper-2), transparent 70%),
+      radial-gradient(ellipse at 100% 100%, var(--wallpaper-3), transparent 70%),
+      radial-gradient(ellipse at 0% 100%, var(--wallpaper-4), transparent 70%), var(--bg);
+    transition: background-color 300ms var(--ease-paper);
+  }
+
+  .wallpaper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: var(--wallpaper-ink);
+    -webkit-mask-image: url('../assets/wallpaper-doodles.svg');
+    mask-image: url('../assets/wallpaper-doodles.svg');
+    -webkit-mask-size: 360px 360px;
+    mask-size: 360px 360px;
+    -webkit-mask-repeat: repeat;
+    mask-repeat: repeat;
+  }
+
+  /* Тонкая «бумажная» полоса прокрутки */
+  .scroll-paper {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/* ——— «ИИ думает»: летучая мышь качается на перекладине, как от ветра ——— */
+@keyframes bat-swing {
+  0% {
+    transform: rotate(0deg);
+  }
+  18% {
+    transform: rotate(8deg);
+  }
+  42% {
+    transform: rotate(-6deg);
+  }
+  62% {
+    transform: rotate(4deg);
+  }
+  82% {
+    transform: rotate(-2deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@keyframes bat-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(1.08, 0.97);
+  }
+}
+@layer components {
+  /* точка вращения — середина перекладины (сетка знака 100×100) */
+  .bat-swing {
+    transform-box: view-box;
+    transform-origin: 50px 11px;
+    animation: bat-swing 2.6s ease-in-out infinite;
+  }
+  .bat-breathe {
+    transform-box: view-box;
+    transform-origin: 50px 45px;
+    animation: bat-breathe 1.7s ease-in-out infinite;
+  }
+}
+
+/* ——— Markdown в чате задачи ——— */
+@layer components {
+  /* Ответ помощника — засечным шрифтом покрупнее: читается как текст, а не как интерфейс */
+  .md-body {
+    overflow-wrap: anywhere;
+    font-family: var(--font-serif);
+    font-size: 16.5px;
+    line-height: 1.65;
+    font-optical-sizing: auto;
+  }
+  .md-body code,
+  .md-body pre {
+    font-family: var(--font-mono);
+  }
+  .md-body > * + * {
+    margin-top: 0.75em;
+  }
+  .md-body h1,
+  .md-body h2,
+  .md-body h3,
+  .md-body h4 {
+    margin-top: 1.1em;
+    line-height: 1.3;
+    font-weight: 600;
+  }
+  .md-body h1 {
+    font-size: 1.25rem;
+  }
+  .md-body h2 {
+    font-size: 1.125rem;
+  }
+  .md-body h3,
+  .md-body h4 {
+    font-size: 1rem;
+  }
+  .md-body ul {
+    list-style: disc;
+    padding-left: 1.35em;
+  }
+  .md-body ol {
+    list-style: decimal;
+    padding-left: 1.5em;
+  }
+  .md-body li + li {
+    margin-top: 0.25em;
+  }
+  .md-body li::marker {
+    color: var(--fg-muted);
+  }
+  .md-body blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 0.85em;
+    color: var(--fg-muted);
+  }
+  .md-body hr {
+    border-color: var(--border);
+  }
+  .md-body strong {
+    font-weight: 600;
+    color: var(--heading);
+  }
+
+  /*
+   * Подсветка кода highlight.js — только токенами палитры (новых цветов нет):
+   * ключевые слова — heading + жирный, строки и числа — основной текст с подчёркиванием-акцентом,
+   * комментарии — приглушённые курсивом.
+   */
+  .hljs-keyword,
+  .hljs-built_in,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-type {
+    color: var(--heading);
+    font-weight: 600;
+  }
+  .hljs-string,
+  .hljs-number,
+  .hljs-regexp,
+  .hljs-attr,
+  .hljs-attribute {
+    color: var(--fg);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: var(--fg-muted);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-function,
+  .hljs-name,
+  .hljs-section {
+    color: var(--heading);
+  }
+}

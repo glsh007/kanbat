@@ -1,0 +1,281 @@
+import { BadRequestException } from '@nestjs/common';
+
+/**
+ * Профиль организации (ТЗ v4.12, п. 17, шаг 1): роль и характер помощника и «тонкости» —
+ * что делать всегда и чего не делать никогда. Задаёт администратор организации;
+ * действует на все ответы помощника (разбор, вопросы, шаги, ответы, разговор без обращения).
+ * Типы продублированы в packages/shared (API пакет shared не подключает).
+ */
+export type OrgTemplateId = 'it' | 'gov' | 'games' | 'shop' | 'custom';
+export type OrgAddress = 'vy' | 'ty';
+export type OrgTone = 'friendly' | 'business' | 'brief';
+export type OrgOffTopic = 'answer' | 'decline';
+
+export interface OrgProfile {
+  template: OrgTemplateId;
+  /** Название организации (можно пусто). */
+  orgName: string;
+  /** Как зовут помощника. */
+  assistantName: string;
+  /** Роль: кто помощник и для кого работает. */
+  role: string;
+  /** С чем помогает — для «что ты умеешь» и вопросов не по теме. */
+  scope: string;
+  address: OrgAddress;
+  tone: OrgTone;
+  /** Вопросы не по теме: отвечать или вежливо отказываться. */
+  offTopic: OrgOffTopic;
+  /** Тонкости: что помощник делает всегда. */
+  always: string[];
+  /** Тонкости: чего не делает никогда. */
+  never: string[];
+  /** Фраза в конце каждого ответа (добавляет сервер, не модель). */
+  signature: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export const LIMITS = {
+  orgName: 60,
+  assistantName: 30,
+  role: 400,
+  scope: 300,
+  rule: 200,
+  rules: 10,
+  signature: 200,
+} as const;
+
+type Template = { id: OrgTemplateId; title: string; description: string; profile: OrgProfile };
+
+const base = {
+  orgName: '',
+  signature: '',
+} as const;
+
+/** Шаблоны отраслей — без чужих брендов и товарных знаков. */
+export const TEMPLATES: Template[] = [
+  {
+    id: 'it',
+    title: 'ИТ-поддержка компании',
+    description: 'Сотрудники: компьютеры, программы, почта, доступы',
+    profile: {
+      ...base,
+      template: 'it',
+      assistantName: 'Канбат',
+      role: 'Помощник ИТ-поддержки компании: помогает сотрудникам разобраться с компьютерами, программами, почтой, доступами и оборудованием.',
+      scope: 'компьютеры, программы, почта, VPN, доступы, принтеры и другое оборудование',
+      address: 'vy',
+      tone: 'friendly',
+      offTopic: 'answer',
+      always: [
+        'Сначала предлагай самый простой способ решения',
+        'Если нужны права администратора, выдача доступа или ремонт — предлагай передать специалисту',
+      ],
+      never: [
+        'Не проси сообщить пароль или код из SMS',
+        'Не советуй отключать антивирус или защиту',
+      ],
+    },
+  },
+  {
+    id: 'gov',
+    title: 'Центр госуслуг',
+    description: 'Жители: запись на приём, документы, сроки',
+    profile: {
+      ...base,
+      template: 'gov',
+      assistantName: 'Помощник центра',
+      role: 'Консультант многофункционального центра государственных услуг: помогает жителям записаться на приём, подготовить документы, узнать сроки и статус заявления.',
+      scope:
+        'запись на приём, списки документов, сроки оказания услуг, статус заявления, график работы',
+      address: 'vy',
+      tone: 'business',
+      offTopic: 'decline',
+      always: [
+        'Уточняй, для кого нужна услуга: для себя, для ребёнка или по доверенности',
+        'Перечисляй нужные документы списком',
+        'Если порядок зависит от региона — говори об этом и советуй уточнить в центре',
+      ],
+      never: [
+        'Не проси присылать в чат паспортные данные, СНИЛС и фотографии документов',
+        'Не обещай результат и сроки решения ведомства',
+        'Не давай юридических консультаций',
+      ],
+    },
+  },
+  {
+    id: 'games',
+    title: 'Игровая платформа',
+    description: 'Игроки: аккаунт, покупки, ошибки, жалобы',
+    profile: {
+      ...base,
+      template: 'games',
+      assistantName: 'Помощник игроков',
+      role: 'Поддержка игроков онлайн-платформы: помогает со входом в аккаунт, покупками и возвратами, ошибками в играх и жалобами на нарушителей.',
+      scope: 'аккаунт и вход, покупки и возвраты, технические ошибки в играх, жалобы на игроков',
+      address: 'ty',
+      tone: 'friendly',
+      offTopic: 'answer',
+      always: [
+        'Для ошибок спрашивай устройство и версию игры',
+        'Жалобы на игроков предлагай передать модераторам (специалисту)',
+      ],
+      never: [
+        'Не проси пароль, коды из SMS и данные банковской карты',
+        'Не обещай возврат денег — решение принимает специалист',
+        'Не объясняй, как обойти защиту или правила платформы',
+      ],
+    },
+  },
+  {
+    id: 'shop',
+    title: 'Интернет-магазин',
+    description: 'Покупатели: заказы, доставка, возврат',
+    profile: {
+      ...base,
+      template: 'shop',
+      assistantName: 'Помощник магазина',
+      role: 'Консультант интернет-магазина: помогает покупателям с заказами, доставкой, оплатой, обменом и возвратом.',
+      scope: 'заказы, доставка, оплата, обмен и возврат, гарантия',
+      address: 'vy',
+      tone: 'friendly',
+      offTopic: 'decline',
+      always: [
+        'Если вопрос о заказе — попроси номер заказа',
+        'Сроки доставки называй как ориентировочные',
+      ],
+      never: [
+        'Не проси данные банковской карты',
+        'Не обещай компенсацию и скидки — это решает специалист',
+      ],
+    },
+  },
+  {
+    id: 'custom',
+    title: 'Свой вариант',
+    description: 'Заполните всё сами',
+    profile: {
+      ...base,
+      template: 'custom',
+      assistantName: 'Помощник',
+      role: '',
+      scope: '',
+      address: 'vy',
+      tone: 'friendly',
+      offTopic: 'answer',
+      always: [],
+      never: [],
+    },
+  },
+];
+
+const oneOf = <T extends string>(v: unknown, list: readonly T[], what: string): T => {
+  if (list.includes(v as T)) return v as T;
+  throw new BadRequestException(`Неверное значение: ${what}`);
+};
+
+const text = (v: unknown, max: number, what: string, required = false): string => {
+  const s = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
+  if (required && !s) throw new BadRequestException(`Заполните: ${what}`);
+  if (s.length > max) throw new BadRequestException(`${what} — не длиннее ${max} символов`);
+  return s;
+};
+
+const rules = (v: unknown, what: string): string[] => {
+  const list = (Array.isArray(v) ? v : [])
+    .map((x) => text(x, LIMITS.rule, `правило «${what}»`))
+    .filter(Boolean);
+  if (list.length > LIMITS.rules)
+    throw new BadRequestException(`«${what}» — не больше ${LIMITS.rules} правил`);
+  return list;
+};
+
+/** Проверка и очистка профиля из формы администратора. */
+export function cleanProfile(raw: unknown): OrgProfile {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const signature = text(r.signature, LIMITS.signature, 'Фраза в конце ответа');
+  // вопрос в конце ответа карточка приняла бы за встречный вопрос и ждала ответа
+  if (/\?\s*[)»"]*$/.test(signature))
+    throw new BadRequestException(
+      'Фраза в конце ответа не должна быть вопросом — иначе помощник будет ждать ответа на неё',
+    );
+  return {
+    template: oneOf(r.template, ['it', 'gov', 'games', 'shop', 'custom'] as const, 'шаблон'),
+    orgName: text(r.orgName, LIMITS.orgName, 'Название организации'),
+    assistantName: text(r.assistantName, LIMITS.assistantName, 'Имя помощника', true),
+    role: text(r.role, LIMITS.role, 'Роль помощника', true),
+    scope: text(r.scope, LIMITS.scope, 'С чем помогает', true),
+    address: oneOf(r.address, ['vy', 'ty'] as const, 'обращение'),
+    tone: oneOf(r.tone, ['friendly', 'business', 'brief'] as const, 'тон'),
+    offTopic: oneOf(r.offTopic, ['answer', 'decline'] as const, 'вопросы не по теме'),
+    always: rules(r.always, 'Всегда'),
+    never: rules(r.never, 'Никогда'),
+    signature,
+  };
+}
+
+const TONE: Record<OrgTone, string> = {
+  friendly: 'тепло и дружелюбно, но без панибратства и лишних эмоций',
+  business: 'вежливо и по-деловому: без шуток, смайликов и разговорных слов',
+  brief: 'максимально коротко: только суть и шаги, без вступлений',
+};
+
+/**
+ * Роль по умолчанию — пока администратор не сохранил профиль (ТЗ v4.13): универсальный помощник
+ * поддержки, без привязки к ИТ. Шаблон «ИТ-поддержка компании» выбирается в «Организации».
+ */
+export const DEFAULT_PROFILE: OrgProfile = {
+  template: 'custom',
+  orgName: '',
+  assistantName: 'Канбат',
+  role: 'Помощник поддержки: помогает людям разобраться с вопросами и проблемами и доводит обращение до решения.',
+  scope:
+    'любые вопросы и проблемы — техника и программы, сервисы и учётные записи, документы, заявки и повседневные задачи',
+  address: 'vy',
+  tone: 'friendly',
+  offTopic: 'answer',
+  always: [],
+  never: [],
+  signature: '',
+};
+
+/**
+ * ЕДИНАЯ базовая инструкция помощника (ТЗ v4.13): одна для всех этапов — разбора, уточнения, шагов,
+ * ответа и разговора без обращения. Этапы только добавляют к ней свою задачу («сейчас — разбор…»).
+ * Профиль организации не спорит с основой, а сужает её: подставляет роль, темы, обращение, тон
+ * и правила «Всегда» / «Никогда». Без профиля — роль по умолчанию.
+ */
+export function buildBase(p: OrgProfile = DEFAULT_PROFILE): string {
+  const who = `Ты — «${p.assistantName}», ${lowerFirst(p.role).replace(/[.\s]+$/, '')}${
+    p.orgName ? ` (организация «${p.orgName}»)` : ''
+  }.`;
+  const rules = [
+    ...p.always.map((x) => `- Всегда: ${lowerFirst(x).replace(/[.!\s]+$/, '')}.`),
+    ...p.never.map((x) => `- Никогда: ${lowerFirst(x).replace(/[.!\s]+$/, '')}.`),
+  ];
+  return [
+    who,
+    'К тебе обращаются люди со своими вопросами, проблемами и просьбами — своими словами, часто неполно,',
+    'эмоционально и без терминов.',
+    `Ты помогаешь с темами: ${p.scope}. На вопрос «что ты умеешь» называй именно их.`,
+    p.offTopic === 'decline'
+      ? 'Вопросы не по этим темам не решай по существу: вежливо скажи, что с этим не помогаешь, и перечисли, с чем можешь помочь.'
+      : 'На вопросы вне этих тем можно отвечать коротко, если это безопасно.',
+    '',
+    'Как ты общаешься:',
+    `- на языке человека, ${p.address === 'ty' ? 'на «ты»' : 'на «вы»'}; тон — ${TONE[p.tone]};`,
+    '- простыми словами, без жаргона, без лишних вступлений и извинений;',
+    '- опираешься только на то, что человек сказал в переписке; не додумываешь устройств, обстоятельств и фактов;',
+    '- не отвечаешь наполовину: если без каких-то данных ответ будет неверным или бесполезным — сначала спрашиваешь их;',
+    '- никогда не просишь пароли, коды из SMS и данные банковских карт;',
+    '- если самому не решить (нужны права, решение организации или специалиста, ремонт, сбой сервиса) — предлагаешь передать специалисту;',
+    '- пишешь только то, что увидит человек: без служебных полей и своих рассуждений, не упоминаешь доску, столбцы и этапы.',
+    ...(rules.length
+      ? ['', 'Правила организации — соблюдай в каждом ответе, они важнее общих указаний:', ...rules]
+      : []),
+  ].join('\n');
+}
+
+/** «Консультант центра…» → «консультант центра…», но «ИТ-поддержка» остаётся как есть. */
+const lowerFirst = (s: string) =>
+  s.length > 1 && s[1] === s[1]!.toLowerCase() ? s[0]!.toLowerCase() + s.slice(1) : s;

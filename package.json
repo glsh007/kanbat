@@ -1,0 +1,36 @@
+{
+  "name": "kanbat",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Канбат — ИИ-помощник поддержки: каждое обращение висит на канбан-доске, пока не решено",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "npm run tokens && concurrently -k -n api,web -c green,blue \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run start:dev -w @app/api",
+    "build": "npm run tokens && npm run build -w @app/web && npm run build -w @app/api",
+    "tokens": "npm run build -w @app/tokens",
+    "check:contrast": "npm run check -w @app/tokens",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write .",
+    "check": "npm run check:contrast && npm run typecheck && npm run lint",
+    "dev:web": "npm run dev -w @app/web",
+    "start": "node scripts/start.mjs",
+    "share": "node scripts/share.mjs",
+    "check-ai": "node --env-file-if-exists=apps/api/.env scripts/check-ai.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4",
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Канбат</title>
+    <meta
+      name="description"
+      content="Канбат — ИИ-помощник поддержки: каждое обращение висит на канбан-доске, пока не будет решено"
+    />
+    <meta name="theme-color" content="#FAF9F5" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/icons/icon-16.png" sizes="16x16" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Ставим тему до первой отрисовки, чтобы не было «вспышки» светлой темы.
+      // Ключ совпадает с THEME_STORAGE_KEY в src/theme/theme.ts.
+      (function () {
+        var pref = 'dark';
+        try {
+          pref = localStorage.getItem('kc-theme') || 'dark'; // тёмная по умолчанию (ТЗ v2, п. 8)
+        } catch (e) {}
+        var dark =
+          pref === 'dark' ||
+          (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        // цветовая схема (ТЗ v4.11) — ключ совпадает с SCHEME_STORAGE_KEY
+        try {
+          var scheme = localStorage.getItem('kc-scheme');
+          if (scheme) document.documentElement.dataset.scheme = scheme;
+        } catch (e) {}
+        if (dark) document.querySelector('meta[name="theme-color"]').content = '#262624';
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

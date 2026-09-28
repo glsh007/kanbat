@@ -1,0 +1,21 @@
+{
+  "name": "Канбат",
+  "short_name": "Канбат",
+  "description": "ИИ-помощник поддержки: каждое обращение висит на канбан-доске, пока не будет решено",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#262624",
+  "theme_color": "#262624",
+  "icons": [
+    { "src": "/icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
