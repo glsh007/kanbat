@@ -6,8 +6,17 @@ import {
   type ColumnId,
   type Task,
 } from '@app/shared';
-import { ArrowLeft, Headset, Maximize2, Minimize2, MoreHorizontal, Trash2, X } from 'lucide-react';
-import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
+import {
+  ArrowLeft,
+  Flag,
+  Headset,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { UrgentMark } from '@/components/ui/UrgentMark';
 import { useEffect, useId, useRef, useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { NavArrows } from '@/layout/NavArrows';
@@ -33,18 +42,12 @@ type Props = {
   onClose: () => void;
   onRename: (title: string) => void;
   onMove: (to: ColumnId) => void;
-  onKind: (structure: Task['structure'], difficulty: Task['difficulty']) => void;
+  /** «Попросить срочно» / изменить просьбу (ТЗ v4.16). */
+  onUrgent: () => void;
   onDelete: () => void;
   /** Передать специалисту (undefined — сейчас нельзя). */
   onEscalate?: () => void;
 };
-
-const KINDS: { structure: Task['structure']; difficulty: Task['difficulty']; label: string }[] = [
-  { structure: 'clear', difficulty: 'easy', label: 'A — чёткая, лёгкая' },
-  { structure: 'clear', difficulty: 'hard', label: 'B — чёткая, трудная' },
-  { structure: 'loose', difficulty: 'easy', label: 'C — размытая, лёгкая' },
-  { structure: 'loose', difficulty: 'hard', label: 'D — размытая, трудная' },
-];
 
 export function TaskHeader({
   task,
@@ -55,7 +58,7 @@ export function TaskHeader({
   onClose,
   onRename,
   onMove,
-  onKind,
+  onUrgent,
   onDelete,
   onEscalate,
 }: Props) {
@@ -80,17 +83,10 @@ export function TaskHeader({
     setEditing(false);
   };
 
-  // Тип задачи и столбцы — для вида «Доска» (продвинутые пользователи)
+  // Столбцы — для вида «Доска». Тип задачи (A–D) ставит ИИ, вручную не меняется (ТЗ v4.16):
+  // на путь задачи он не влияет, а ручная правка лишь вводила в заблуждение.
   const boardItems: MenuItem[] = showKind
     ? [
-        { kind: 'label', id: 'kind', label: 'Тип задачи' },
-        ...KINDS.map((k): MenuItem => ({
-          id: k.label,
-          label: k.label,
-          checked: k.structure === task.structure && k.difficulty === task.difficulty,
-          onSelect: () => onKind(k.structure, k.difficulty),
-        })),
-        { kind: 'separator', id: 's1' },
         { kind: 'label', id: 'move', label: 'Переместить в столбец' },
         ...COLUMNS.map((c): MenuItem => ({
           id: `m-${c}`,
@@ -119,6 +115,12 @@ export function TaskHeader({
           } as MenuItem,
         ]
       : []),
+    {
+      id: 'urgent',
+      label: task.urgentRequest ? 'Просьба «Срочно»…' : 'Попросить срочно…',
+      icon: <Flag size={16} />,
+      onSelect: onUrgent,
+    },
     { id: 'delete', label: 'Удалить задачу', icon: <Trash2 size={16} />, onSelect: onDelete },
   ];
 
@@ -187,7 +189,7 @@ export function TaskHeader({
           {showKind && (
             <TaskTypeBadge structure={task.structure} difficulty={task.difficulty} showKind />
           )}
-          <UrgencyBadge urgency={task.urgency} />
+          {task.urgentRequest && <UrgentMark reason={task.urgentRequest.reason} />}
           {/* тип A–D — только в виде «Доска»; в списке скринридер не читает непонятную букву */}
           {showKind && <span className="sr-only">Тип {kind}</span>}
         </span>

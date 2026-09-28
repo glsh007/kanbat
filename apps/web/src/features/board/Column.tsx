@@ -1,11 +1,4 @@
-import {
-  COLUMN_HINTS,
-  COLUMN_LABELS,
-  columnIndex,
-  URGENCY_ORDER,
-  type ColumnId,
-  type Task,
-} from '@app/shared';
+import { COLUMN_HINTS, COLUMN_LABELS, columnIndex, type ColumnId, type Task } from '@app/shared';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CalendarClock, ChevronDown, LayoutGrid, Maximize2 } from 'lucide-react';
@@ -47,7 +40,8 @@ export const VISIBLE_LIMIT = 5;
 
 /** Что показать первым в свёрнутом столбце: ждёт ответа / ошибка, затем по срочности. */
 const attention = (t: Task) =>
-  (t.status === 'awaiting_user' || t.status === 'error' ? 0 : 10) + URGENCY_ORDER[t.urgency];
+  // сначала ждёт ответа / ошибка, затем просьба «Срочно» самого человека (не оценка ИИ, ТЗ v4.16)
+  (t.status === 'awaiting_user' || t.status === 'error' ? 0 : 10) + (t.urgentRequest ? 0 : 1);
 
 function EmptyColumn({ column }: { column: ColumnId }) {
   return (

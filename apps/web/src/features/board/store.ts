@@ -9,6 +9,7 @@ import {
   type SectionColor,
   type Task,
   type SectionMode,
+  maskPersonalData,
 } from '@app/shared';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -56,6 +57,8 @@ export type LiveReply = { text: string; model: string | null };
  */
 export type Tombstones = { tasks: string[]; sections: string[] };
 const TOMBSTONES_MAX = 300;
+/** Сколько дней хранить переписку решённых обращений (ТЗ v4.16). */
+export const KEEP_DONE_DAYS = 180;
 const bury = (list: string[], ids: string[]) => [...list, ...ids].slice(-TOMBSTONES_MAX);
 
 type BoardState = BoardData & {
@@ -81,6 +84,8 @@ type BoardState = BoardData & {
   unschedule: (id: string) => void;
 
   /** id можно задать (ответы специалиста с сервера — чтобы не добавить дважды). */
+  /** Срок хранения (ТЗ v4.16): у решённых давно обращений удалить переписку, карточку оставить. */
+  pruneExpired: (nowMs?: number) => number;
   addMessage: (
     taskId: string,
     msg: Omit<Message, 'id' | 'taskId' | 'createdAt'> & { id?: string },
@@ -279,8 +284,10 @@ export const useBoard = create<BoardState>()(
       live: {},
       sorting: {},
 
-      createTask: (text, sectionId) => {
+      createTask: (raw, sectionId) => {
         const id = newId();
+        // СНИЛС, паспорт, карта — скрываем сразу, до сохранения (ТЗ v4.16)
+        const { text, found } = maskPersonalData(raw);
         const clean = text.trim().replace(/\s+/g, ' ');
         const title = clean.length > 90 ? `${clean.slice(0, 87)}…` : clean;
         const here = sectionId && sectionId !== GENERAL_SECTION_ID ? [sectionId] : [];
@@ -290,6 +297,7 @@ export const useBoard = create<BoardState>()(
           taskId: id,
           role: 'user',
           content: text.trim(),
+          ...(found.length ? { masked: found } : {}),
           createdAt: now(),
         };
         set((s) => ({
@@ -365,8 +373,14 @@ export const useBoard = create<BoardState>()(
           };
         }),
 
-      addMessage: (taskId, msg) => {
-        const id = msg.id ?? newId();
+      addMessage: (taskId, raw) => {
+        const id = raw.id ?? newId();
+        // слова человека: персональные данные скрываем до сохранения и до отправки ИИ (ТЗ v4.16)
+        let msg = raw;
+        if (raw.role === 'user') {
+          const { text, found } = maskPersonalData(raw.content);
+          if (found.length) msg = { ...raw, content: text, masked: found };
+        }
         set((s) => ({
           messages: {
             ...s.messages,
@@ -374,6 +388,30 @@ export const useBoard = create<BoardState>()(
           },
         }));
         return id;
+      },
+
+      pruneExpired: (nowMs = Date.now()) => {
+        const edge = nowMs - KEEP_DONE_DAYS * 24 * 3_600_000;
+        const { tasks, messages } = get();
+        const next = { ...messages };
+        let n = 0;
+        for (const t of Object.values(tasks)) {
+          if (t.column !== 'done' || Date.parse(t.updatedAt) > edge) continue;
+          const list = messages[t.id] ?? [];
+          if (list.length === 1 && list[0]!.role === 'system') continue;
+          next[t.id] = [
+            {
+              id: newId(),
+              taskId: t.id,
+              role: 'system',
+              content: `Переписка удалена: обращение решено больше ${KEEP_DONE_DAYS} дней назад. Карточка осталась.`,
+              createdAt: now(),
+            },
+          ];
+          n++;
+        }
+        if (n) set({ messages: next });
+        return n;
       },
 
       removeMessage: (taskId, messageId) =>

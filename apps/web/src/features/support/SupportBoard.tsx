@@ -3,6 +3,7 @@ import { AlarmClock, Clock, Hand } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Logo } from '@/brand/Logo';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
+import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
 import { useNow } from '@/lib/useNow';
 import {
@@ -62,6 +63,7 @@ function SupportCard({
       >
         <div className="flex flex-wrap items-center gap-2">
           <UrgencyBadge urgency={e.handoff.urgency} showAll />
+          {task.urgent && <UrgentMark reason={task.urgent.reason} forSpecialist />}
           {waiting && long && (
             <span className="inline-flex h-6 items-center gap-1 rounded-full bg-accent-soft px-2 text-xs font-medium text-on-accent-soft">
               <AlarmClock size={13} aria-hidden />

@@ -12,7 +12,14 @@ export class SupportController {
   @HttpCode(200)
   push(
     @CurrentUser() user: User,
-    @Body() body: { taskId?: unknown; title?: unknown; escalation?: unknown; messages?: unknown },
+    @Body()
+    body: {
+      taskId?: unknown;
+      title?: unknown;
+      escalation?: unknown;
+      messages?: unknown;
+      urgent?: unknown;
+    },
   ) {
     return this.support.push(user, body);
   }

@@ -23,6 +23,7 @@ import { config, LLM_LIMITS } from '../config';
 import { OllamaClient, OllamaError, toOllama } from './ollama.client';
 import { OpenAiClient } from './openai.client';
 import * as P from './prompts';
+import { maskPersonalData } from '../common/pii';
 import { OrgService } from '../org/org.service';
 import type { OrgProfile } from '../org/profile';
 import { StreamCleaner } from './stream-cleaner';
@@ -148,10 +149,18 @@ export class LlmService {
   }
 
   private trim(history: ChatMessage[]): ChatMessage[] {
-    return history
-      .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-      .slice(-HISTORY_LIMIT)
-      .map((m) => ({ role: m.role, content: m.content.slice(0, MESSAGE_CHAR_LIMIT) }));
+    return (
+      history
+        .filter(
+          (m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string',
+        )
+        .slice(-HISTORY_LIMIT)
+        // персональные данные ИИ не получает, даже если клиент их не скрыл (ТЗ v4.16)
+        .map((m) => ({
+          role: m.role,
+          content: maskPersonalData(m.content.slice(0, MESSAGE_CHAR_LIMIT)).text,
+        }))
+    );
   }
 
   /** Логирует ошибку модели; при 404 (модель удалили) сбрасывает кэш списка моделей. */
@@ -239,6 +248,7 @@ export class LlmService {
     requested?: string | null,
     history: ChatMessage[] = [],
   ): Promise<Triage> {
+    text = maskPersonalData(text).text;
     const hist = history.length
       ? this.trim(history)
       : [{ role: 'user' as const, content: text.slice(0, MESSAGE_CHAR_LIMIT) }];
@@ -271,7 +281,11 @@ export class LlmService {
       }
       // явный вопрос или просьба («как установить…?», «сколько будет 2 + 3») — это обращение,
       // даже если модель сомневается
-      if (r.meaningful === false && used.split('\n').some(looksLikeRequest))
+      // …но не вопрос к самому помощнику («Кто ты сейчас?», «Как тебя зовут?») — это разговор (v4.15)
+      if (
+        r.meaningful === false &&
+        used.split('\n').some((l) => looksLikeRequest(l) && !isSmalltalk(l))
+      )
         r = { meaningful: true }; // поля «непонятного» разбора — случайные: берём разбор по словам
     }
     if (r.meaningful === false) return unclearTriage(text, await this.smalltalk(model, hist, text));
@@ -520,7 +534,9 @@ export class LlmService {
     signal: AbortSignal,
   ): Promise<{ model: string | null; reply: string }> {
     const model = await this.resolve(requested);
-    const history: ChatMessage[] = [{ role: 'user', content: question.slice(0, 1000) }];
+    const history: ChatMessage[] = [
+      { role: 'user', content: maskPersonalData(question.slice(0, 1000)).text },
+    ];
     const sign = this.org.signature(profile);
     if (!model)
       return this.withoutAi(() => ({

@@ -1,3 +1,4 @@
+import { maskPersonalData } from '../common/pii';
 import {
   BadRequestException,
   ForbiddenException,
@@ -281,8 +282,9 @@ export class ForumService implements OnModuleInit {
     me: User,
     body: { sectionId?: unknown; title?: unknown; body?: unknown; fromRequest?: unknown },
   ) {
-    const title = cleanTitle(body?.title);
-    const text = typeof body?.body === 'string' ? body.body.trim() : '';
+    // на форуме всё публично: СНИЛС, паспорт и карты скрываем (ТЗ v4.16)
+    const title = maskPersonalData(cleanTitle(body?.title)).text;
+    const text = typeof body?.body === 'string' ? maskPersonalData(body.body.trim()).text : '';
     if (!(await this.communities.isActive(body?.sectionId)))
       throw new BadRequestException('Выберите сообщество');
     this.checkTitle(title);
@@ -312,7 +314,7 @@ export class ForumService implements OnModuleInit {
   }
 
   async reply(me: User, threadId: string, textRaw: unknown) {
-    const text = typeof textRaw === 'string' ? textRaw.trim() : '';
+    const text = typeof textRaw === 'string' ? maskPersonalData(textRaw.trim()).text : '';
     if (!text) throw new BadRequestException('Пустой ответ');
     if (text.length > REPLY_MAX) throw new BadRequestException('Ответ слишком длинный');
     const junk = junkReason(text, 'reply');

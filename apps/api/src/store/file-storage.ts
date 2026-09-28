@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { Logger } from '@nestjs/common';
 import { writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -18,6 +19,8 @@ type Data = {
   meta: Record<string, string>;
   users: Record<string, User>;
   sessions: Record<string, string>;
+  /** Когда вход последний раз использовался (ТЗ v4.16): без активности дольше срока — выход. */
+  sessionSeen: Record<string, string>;
   boards: Record<string, BoardBlob>;
   tickets: Record<string, Ticket>;
   forumThreads: Record<string, ForumThread>;
@@ -25,11 +28,15 @@ type Data = {
   forumCommunities: Record<string, ForumCommunity>;
 };
 
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
 const empty = (): Data => ({
   version: 1,
   meta: {},
   users: {},
   sessions: {},
+  sessionSeen: {},
   boards: {},
   tickets: {},
   forumThreads: {},
@@ -133,7 +140,10 @@ export class FileStorage implements Storage {
     delete this.data.users[id];
     delete this.data.boards[id];
     for (const [token, userId] of Object.entries(this.data.sessions))
-      if (userId === id) delete this.data.sessions[token];
+      if (userId === id) {
+        delete this.data.sessions[token];
+        delete this.data.sessionSeen[token];
+      }
     for (const [tid, t] of Object.entries(this.data.tickets))
       if (t.ownerId === id) delete this.data.tickets[tid];
     // форум: темы и ответы пользователя удаляются, его голоса снимаются
@@ -216,18 +226,42 @@ export class FileStorage implements Storage {
 
   async createSession(token: string, userId: string) {
     this.data.sessions[token] = userId;
+    this.data.sessionSeen[token] = new Date().toISOString();
     this.schedule();
   }
+  /**
+   * Вход по токену. Без активности дольше `SESSION_DAYS` (по умолчанию 30 дней) — вход закрыт:
+   * забытый вход на чужом компьютере не живёт вечно (ТЗ v4.16). Отметка активности — не чаще раза в час.
+   */
   async userIdBySession(token: string) {
-    return this.data.sessions[token] ?? null;
+    const userId = this.data.sessions[token];
+    if (!userId) return null;
+    const now = Date.now();
+    const seen = Date.parse(this.data.sessionSeen[token] ?? '');
+    if (Number.isFinite(seen) && now - seen > config.sessionDays * DAY) {
+      delete this.data.sessions[token];
+      delete this.data.sessionSeen[token];
+      this.schedule();
+      return null;
+    }
+    // старые входы (до v4.16) без отметки — отсчёт с сегодняшнего дня
+    if (!Number.isFinite(seen) || now - seen > HOUR) {
+      this.data.sessionSeen[token] = new Date(now).toISOString();
+      this.schedule();
+    }
+    return userId;
   }
   async deleteSession(token: string) {
     delete this.data.sessions[token];
+    delete this.data.sessionSeen[token];
     this.schedule();
   }
   async deleteSessionsOf(userId: string, except?: string) {
     for (const [token, id] of Object.entries(this.data.sessions))
-      if (id === userId && token !== except) delete this.data.sessions[token];
+      if (id === userId && token !== except) {
+        delete this.data.sessions[token];
+        delete this.data.sessionSeen[token];
+      }
     this.schedule();
   }
 

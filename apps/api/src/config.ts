@@ -26,6 +26,9 @@ export const config = {
   supportCode: process.env.SUPPORT_CODE?.trim() || null,
   /** Код администратора организации (ТЗ v4.12); нет — сервер придумает и покажет при запуске. */
   adminCode: process.env.ADMIN_CODE?.trim() || null,
+  /** Сроки хранения (ТЗ v4.16): вход без активности, переписка решённых заявок специалиста. */
+  sessionDays: Math.max(1, Number(process.env.SESSION_DAYS) || 30),
+  ticketKeepDays: Math.max(7, Number(process.env.TICKET_KEEP_DAYS) || 90),
   /** Сколько прокси перед сервером (Caddy, туннель): 1 по умолчанию, 0 — сервер смотрит в интернет сам. */
   trustProxy: Math.max(0, Math.floor(Number(process.env.TRUST_PROXY ?? 1) || 0)),
   /** Отдавать собранный сайт с этого же сервера (npm run share, Docker). */

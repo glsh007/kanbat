@@ -39,6 +39,8 @@ export function SessionGate({ children }: { children: ReactNode }) {
       if (lastLoadError()) return setPhase('error');
       // ответы, которые писались до перезагрузки, уже не придут — не «думаем» вечно
       recoverInterrupted();
+      // срок хранения: у давно решённых обращений переписка удаляется, карточка остаётся (ТЗ v4.16)
+      useBoard.getState().pruneExpired();
       startSaving();
       stopSync = startTicketSync();
       setPhase('ready');

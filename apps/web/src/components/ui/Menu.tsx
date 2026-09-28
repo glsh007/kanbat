@@ -76,20 +76,31 @@ export function Menu({ label, icon, items, triggerClassName }: Props) {
     const first = menuRef.current?.querySelector<HTMLElement>(
       '[role^="menuitem"]:not([aria-disabled="true"])',
     );
-    first?.focus();
+    // фокус без прокрутки: иначе сам фокус прокручивал страницу и меню тут же закрывалось
+    first?.focus({ preventScroll: true });
 
     const onPointer = (e: PointerEvent) => {
       const t = e.target as Node;
       if (!menuRef.current?.contains(t) && !triggerRef.current?.contains(t)) close(false);
     };
-    const onScrollOrResize = () => close(false);
+    // Меню «привязано» к кнопке: закрываем, только если кнопка действительно сдвинулась
+    // (прокрутили список под меню). Прокрутка внутри меню или «докрутка» страницы после
+    // перехода, не сдвинувшая кнопку, меню не закрывает (ТЗ v4.16, исправление).
+    const start = triggerRef.current?.getBoundingClientRect();
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      const now = triggerRef.current?.getBoundingClientRect();
+      if (!start || !now) return close(false);
+      if (Math.abs(now.top - start.top) > 2 || Math.abs(now.left - start.left) > 2) close(false);
+    };
+    const onResize = () => close(false);
     document.addEventListener('pointerdown', onPointer);
-    window.addEventListener('resize', onScrollOrResize);
-    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       document.removeEventListener('pointerdown', onPointer);
-      window.removeEventListener('resize', onScrollOrResize);
-      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open, close]);
 

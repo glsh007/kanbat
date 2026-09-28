@@ -21,7 +21,14 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function signature(t: Task, msgs: Message[] | undefined): string {
   const e = t.escalation!;
-  return [e.rev ?? 0, e.status, msgs?.length ?? 0, msgs?.at(-1)?.id ?? '', t.title].join('|');
+  return [
+    e.rev ?? 0,
+    e.status,
+    msgs?.length ?? 0,
+    msgs?.at(-1)?.id ?? '',
+    t.title,
+    t.urgentRequest?.at ?? '',
+  ].join('|');
 }
 
 function schedulePush(taskId: string) {
@@ -48,6 +55,8 @@ async function push(taskId: string) {
       escalation: t.escalation,
       // специалисту — только сводка и сообщения после передачи, разговор с ИИ остаётся у человека
       messages: messagesForSpecialist(msgs, t.escalation),
+      // просьба «Срочно» с причиной — специалист видит её как просьбу (ТЗ v4.16)
+      urgent: t.urgentRequest ?? null,
     });
     await apply(ticket);
   } catch {

@@ -26,7 +26,7 @@ import { fieldClass } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, type MenuItem } from '@/components/ui/Menu';
 import { TaskTypeBadge } from '@/components/ui/TaskTypeBadge';
-import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
+import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
 import { formatCountdown, formatWhen, plural } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
@@ -392,9 +392,7 @@ export function TaskCard({
         'group relative flex flex-col rounded-card border bg-surface text-fg',
         compact ? 'gap-1.5 p-2.5' : 'gap-2 p-3',
         'transition-[box-shadow,border-color,opacity] duration-200',
-        task.status === 'awaiting_user' || task.urgency === 'critical'
-          ? 'border-accent'
-          : 'border-line',
+        task.status === 'awaiting_user' || task.urgentRequest ? 'border-accent' : 'border-line',
         task.status === 'error' && 'border-dashed border-line-strong',
         overlay ? 'rotate-[1.5deg] cursor-grabbing shadow-raised' : 'shadow-card',
         placeholder && 'opacity-40',
@@ -404,7 +402,7 @@ export function TaskCard({
         {/* бейджи переносятся на новую строку в узком столбце, кнопки справа не выталкиваются */}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           <TaskTypeBadge structure={task.structure} difficulty={task.difficulty} />
-          <UrgencyBadge urgency={task.urgency} />
+          {task.urgentRequest && <UrgentMark reason={task.urgentRequest.reason} />}
           {task.recipient === 'support' && task.status !== 'with_support' && (
             <span title="Адресат — оператор поддержки" className="inline-flex text-fg-muted">
               <Headset size={15} aria-hidden />

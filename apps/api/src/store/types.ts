@@ -56,6 +56,10 @@ export interface Ticket {
   replies: TicketReply[];
   /** Какой специалист взял обращение (null — пока никто). */
   takenBy?: { id: string; name: string } | null;
+  /** Просьба «Срочно» от человека с причиной (ТЗ v4.16) — только просьба, на очередь не влияет. */
+  urgent?: { reason: string; at: string } | null;
+  /** Переписка удалена по сроку хранения, осталась сводка (ТЗ v4.16). */
+  archived?: boolean;
   createdAt: string;
   updatedAt: string;
 }

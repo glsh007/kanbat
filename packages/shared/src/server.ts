@@ -2,7 +2,7 @@
  * Контракт сервера: вход, доски пользователей, обращения к специалисту (ТЗ v3.4, п. 15).
  * Хранилище за интерфейсом — сейчас файл, на сервере в интернете — PostgreSQL.
  */
-import type { Escalation, Message } from './domain';
+import type { Escalation, Message, UrgentRequest } from './domain';
 
 export type UserRole = 'employee' | 'specialist';
 
@@ -63,6 +63,10 @@ export interface Ticket {
   replies: TicketReply[];
   /** Какой специалист взял обращение (null — пока никто). */
   takenBy?: { id: string; name: string } | null;
+  /** Просьба «Срочно» от человека с причиной (ТЗ v4.16) — только просьба, на очередь не влияет. */
+  urgent?: UrgentRequest | null;
+  /** Переписка удалена по сроку хранения, осталась сводка (ТЗ v4.16). */
+  archived?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +77,7 @@ export interface TicketPush {
   title: string;
   escalation: Escalation;
   messages: Message[];
+  urgent?: UrgentRequest | null;
 }
 
 /**

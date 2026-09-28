@@ -1,5 +1,5 @@
 import { ESCALATION_LABELS, messagesForSpecialist, type Message } from '@app/shared';
-import { ArrowLeft, Check, Hand, Lock, Send, X } from 'lucide-react';
+import { ArrowLeft, Check, Flag, Hand, Lock, Send, X } from 'lucide-react';
 import { NavArrows } from '@/layout/NavArrows';
 import { motion } from 'motion/react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
+import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
 import { useNow } from '@/lib/useNow';
 import { CopyHandoff, HandoffSummary } from './HandoffSummary';
@@ -143,7 +144,10 @@ export function SpecialistPanel({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-1 text-sm text-fg-muted">
-          <UrgencyBadge urgency={e.handoff.urgency} showAll />
+          <span title="Оценка срочности ИИ по тексту обращения" className="inline-flex">
+            <UrgencyBadge urgency={e.handoff.urgency} showAll />
+          </span>
+          {task.urgent && <UrgentMark reason={task.urgent.reason} forSpecialist />}
           <span>{ESCALATION_LABELS[e.status]}</span>
           <span>передано {agoLabel(e.createdAt, now)}</span>
           <span>· от {task.ownerName}</span>
@@ -154,6 +158,24 @@ export function SpecialistPanel({
 
       <div ref={scrollRef} className="scroll-paper min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-5">
+          {task.urgent && (
+            <p className="flex items-start gap-2 rounded-card border border-line-strong bg-surface px-4 py-3 text-sm">
+              <Flag size={16} aria-hidden className="mt-0.5 shrink-0" />
+              <span>
+                <span className="font-medium text-heading">Сотрудник просит срочно:</span> «
+                {task.urgent.reason}» · {agoLabel(task.urgent.at, now)}
+                <span className="block text-fg-muted">
+                  Это просьба сотрудника — очередь и сроки она не меняет.
+                </span>
+              </span>
+            </p>
+          )}
+          {task.archived && (
+            <p className="rounded-card border border-line bg-sunken px-4 py-3 text-sm text-fg-muted">
+              Переписка удалена по сроку хранения (после решения прошло больше 90 дней) — осталась
+              сводка.
+            </p>
+          )}
           <section
             className="rounded-card border border-line bg-surface p-4"
             aria-labelledby="handoff-h"

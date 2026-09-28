@@ -1,4 +1,4 @@
-import { COLUMN_LABELS, columnIndex, URGENCY_ORDER, type ColumnId, type Task } from '@app/shared';
+import { COLUMN_LABELS, columnIndex, type ColumnId, type Task } from '@app/shared';
 import { ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -8,12 +8,15 @@ import { cn } from '@/lib/cn';
 import { safeStorage } from '@/lib/storage';
 import { TaskCard, type CardActions } from './TaskCard';
 
+/** Просьба «Срочно» самого человека — выше (ТЗ v4.16); оценку ИИ человеку не показываем. */
+const urgentFirst = (a: Task, b: Task) => Number(!!b.urgentRequest) - Number(!!a.urgentRequest);
+
 export type SortMode = 'new' | 'old' | 'urgency' | 'attention';
 
 const SORTS: { id: SortMode; label: string }[] = [
   { id: 'new', label: 'Сначала новые' },
   { id: 'old', label: 'Сначала старые' },
-  { id: 'urgency', label: 'По срочности' },
+  { id: 'urgency', label: 'Сначала «Срочно»' },
   { id: 'attention', label: 'Сначала ждут ответа' },
 ];
 
@@ -33,16 +36,9 @@ function sortTasks(tasks: Task[], mode: SortMode): Task[] {
     case 'old':
       return list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     case 'urgency':
-      return list.sort(
-        (a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency] || byNew(a, b),
-      );
+      return list.sort((a, b) => urgentFirst(a, b) || byNew(a, b));
     case 'attention':
-      return list.sort(
-        (a, b) =>
-          needsYou(a) - needsYou(b) ||
-          URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency] ||
-          byNew(a, b),
-      );
+      return list.sort((a, b) => needsYou(a) - needsYou(b) || urgentFirst(a, b) || byNew(a, b));
     default:
       return list.sort(byNew);
   }

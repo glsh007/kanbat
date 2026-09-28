@@ -1,4 +1,6 @@
 import {
+  isChitChat,
+  maskPersonalData,
   isProblemTask,
   type AgentStep,
   type AnswerOutcome,
@@ -685,11 +687,15 @@ export async function run(id: string, mode: StreamMode, stay = false): Promise<v
   const t = task(id);
   if (!t) return;
   const signal = begin(id);
+  // для ответа на реплику посреди работы: после ответа всё возвращается как было (шаг, вопрос, кнопки)
   const before = {
     status: t.status,
     checkpoint: t.checkpoint,
     pendingQuestions: t.pendingQuestions,
     preview: t.preview,
+    replyOptions: t.replyOptions ?? null,
+    askText: t.askText ?? null,
+    reviewButtons: t.reviewButtons ?? null,
   };
   if (!stay) await moveTo(id, 'working');
   const plan = mode === 'execute' ? (t.plan ?? []).map((p) => p.title) : [];
@@ -879,6 +885,19 @@ export async function rework(id: string, note: string): Promise<void> {
   return run(id, 'answer');
 }
 
+/**
+ * Просьба «Срочно» от человека (ТЗ v4.16) или её снятие. На работу помощника и очередь специалиста
+ * не влияет — специалист видит её как просьбу с причиной (уходит вместе с заявкой).
+ */
+export function setUrgent(id: string, reason: string | null): void {
+  const text = reason?.trim().slice(0, 300) ?? '';
+  S().patchTask(id, {
+    urgentRequest: text
+      ? { reason: maskPersonalData(text).text, at: new Date().toISOString() }
+      : null,
+  });
+}
+
 /** Текст «ответь без уточнений» — по нему помощник понимает, что спрашивать больше нельзя. */
 export const SKIP_ALL = 'Ответь без уточнений — с тем, что уже известно.';
 /** Ответ на пропущенный вопрос. */
@@ -954,6 +973,21 @@ export async function reply(id: string, text: string): Promise<void> {
     S().addMessage(id, { role: 'user', content: clean });
     S().patchTask(id, { checkpoint: null, questions: null, pendingQuestions: 0 });
     return start(id);
+  }
+
+  // Разговор посреди работы над обращением («кто ты?», «спасибо», «вы тут?»): просто ответить —
+  // шаг, вопрос уточнения, встречный вопрос или проверка остаются на месте (ТЗ v4.15)
+  if (
+    t.status === 'awaiting_user' &&
+    (t.checkpoint === 'step' ||
+      t.checkpoint === 'questions' ||
+      t.checkpoint === 'ask' ||
+      t.checkpoint === 'plan' ||
+      t.checkpoint === 'review') &&
+    isChitChat(clean)
+  ) {
+    S().addMessage(id, { role: 'user', content: clean });
+    return run(id, 'answer', true);
   }
 
   if (t.checkpoint === 'questions') {

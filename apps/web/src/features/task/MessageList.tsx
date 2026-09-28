@@ -1,8 +1,17 @@
-import { URGENCY_LABELS, type Message, type Task, type Triage } from '@app/shared';
-import { AlertCircle, BookOpen, Check, Copy, Headset, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { PII_LABELS, type Message, type Task, type Triage } from '@app/shared';
+import {
+  AlertCircle,
+  BookOpen,
+  Check,
+  Copy,
+  Headset,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
 import { CopyHandoff, HandoffSummary } from '@/features/support/HandoffSummary';
 import { cn } from '@/lib/cn';
 import type { LiveReply } from '@/features/board/store';
@@ -37,17 +46,11 @@ function TriageCard({ t }: { t: Triage }) {
     <div className="flex flex-col gap-2.5 rounded-card border border-line bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold text-heading">Что произошло</h3>
-        <UrgencyBadge urgency={t.urgency} showAll />
       </div>
       <p>{t.summary}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-fg-muted">Сервис</dt>
         <dd>{t.service}</dd>
-        <dt className="text-fg-muted">Срочность</dt>
-        <dd>
-          {URGENCY_LABELS[t.urgency]}
-          {t.urgency_reason && <span className="text-fg-muted"> — {t.urgency_reason}</span>}
-        </dd>
         {t.facts.length > 0 && (
           <>
             <dt className="text-fg-muted">Известно</dt>
@@ -264,6 +267,23 @@ export function MessageList({
                 <span className="sr-only">Вы: </span>
                 {m.content}
               </div>
+              {m.masked?.length ? (
+                <p className="flex max-w-[85%] items-start gap-1.5 text-right text-xs text-fg-muted">
+                  <ShieldCheck size={14} aria-hidden className="mt-px shrink-0" />
+                  <span>
+                    Скрыли {m.masked.map((k) => PII_LABELS[k]).join(', ')} — помощнику и специалисту
+                    они не нужны. Не отправляйте персональные данные в чат.
+                  </span>
+                </p>
+              ) : null}
+            </li>
+          );
+
+        // служебная пометка (срок хранения и т. п.) — по центру, мелко
+        if (m.role === 'system')
+          return (
+            <li key={m.id} className="text-center text-sm text-fg-muted">
+              {m.content}
             </li>
           );
 

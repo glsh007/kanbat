@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { Logo } from '@/brand/Logo';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
+import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
 import { useNow } from '@/lib/useNow';
 import {
@@ -74,6 +75,7 @@ function TicketRow({ t, queue, active }: { t: Ticket; queue: Queue; active: bool
           </span>
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
             <UrgencyBadge urgency={e.handoff.urgency} />
+            {t.urgent && <UrgentMark reason={t.urgent.reason} forSpecialist />}
             <span>{ESCALATION_LABELS[e.status]}</span>
             {t.takenBy && <span>· взял: {t.takenBy.name}</span>}
           </span>

@@ -10,6 +10,8 @@ import { ReworkDialog } from '@/features/board/ReworkDialog';
 import { useBoard, useViewMode } from '@/features/board/store';
 import { cn } from '@/lib/cn';
 import { QuestionDock } from './QuestionDock';
+import { UrgentDialog } from './UrgentDialog';
+import { URGENT_NOTE, UrgentMark } from '@/components/ui/UrgentMark';
 import { Composer, type ComposerHandle } from './Composer';
 import { ShareSolution } from '@/features/forum/ShareSolution';
 import { MessageList } from './MessageList';
@@ -74,6 +76,7 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
   const stick = useRef(true);
   const composer = useRef<ComposerHandle>(null);
   const [reworking, setReworking] = useState(false);
+  const [urgentOpen, setUrgentOpen] = useState(false);
   const titleRef = useRef<HTMLDivElement>(null);
 
   const busy = !!live || task?.status === 'awaiting_ai';
@@ -187,13 +190,28 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
           onClose={onClose}
           onRename={(title) => useBoard.getState().patchTask(task.id, { title, titleEdited: true })}
           onMove={move}
-          onKind={(structure, difficulty) =>
-            useBoard.getState().patchTask(task.id, { structure, difficulty })
-          }
+          onUrgent={() => setUrgentOpen(true)}
           onDelete={() => setConfirmDelete(true)}
           onEscalate={canEscalate ? () => void agent.escalate(task.id) : undefined}
         />
       </div>
+
+      {task.urgentRequest && (
+        // постоянное напоминание (ТЗ v4.16): «Срочно» — только просьба, скорость ответа не меняет
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-sunken px-4 py-2 text-sm">
+          <UrgentMark reason={task.urgentRequest.reason} />
+          <span className="min-w-0 flex-1 text-fg-muted">
+            «{task.urgentRequest.reason}». {URGENT_NOTE}
+          </span>
+          <button
+            type="button"
+            onClick={() => setUrgentOpen(true)}
+            className="min-h-9 text-sm font-medium text-heading underline-offset-4 hover:underline"
+          >
+            Изменить
+          </button>
+        </div>
+      )}
 
       <div
         ref={scrollRef}
@@ -401,6 +419,14 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
       </Dialog>
 
       {/* «Доработать»: что изменить — и ответ переписывается (как «Доработать» на карточке) */}
+      <UrgentDialog
+        task={urgentOpen ? task : undefined}
+        onClose={() => setUrgentOpen(false)}
+        onSave={(reason) => {
+          setUrgentOpen(false);
+          agent.setUrgent(task.id, reason);
+        }}
+      />
       <ReworkDialog
         task={reworking ? task : undefined}
         from={task.column}

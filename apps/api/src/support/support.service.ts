@@ -1,9 +1,13 @@
+import { maskPersonalData } from '../common/pii';
+import { config } from '../config';
 import {
   BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
@@ -36,6 +40,19 @@ type RawMessage = {
  * Всё остальное — разговор с ИИ, ответы на кнопки — на сервер в обращение не попадает.
  * То же правило, что `messagesForSpecialist` в packages/shared.
  */
+/**
+ * Просьба «Срочно» от человека (ТЗ v4.16): только причина и время. На очередь и сроки не влияет —
+ * специалист видит её как просьбу.
+ */
+function asUrgent(raw: unknown): { reason: string; at: string } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as { reason?: unknown; at?: unknown };
+  const reason =
+    typeof r.reason === 'string' ? maskPersonalData(r.reason.trim()).text.slice(0, 300) : '';
+  if (!reason) return null;
+  return { reason, at: typeof r.at === 'string' ? r.at.slice(0, 40) : now() };
+}
+
 function afterHandoff(messages: unknown, escalation: Pick<Escalation, 'createdAt'>) {
   if (!Array.isArray(messages)) return [];
   return (messages as RawMessage[])
@@ -55,7 +72,7 @@ function afterHandoff(messages: unknown, escalation: Pick<Escalation, 'createdAt
       taskId: String(m.taskId ?? '').slice(0, 100),
       role: 'user' as const,
       kind: 'text' as const,
-      content: String(m.content).slice(0, REPLY_MAX),
+      content: maskPersonalData(String(m.content).slice(0, REPLY_MAX)).text,
       createdAt: String(m.createdAt),
     }));
 }
@@ -84,14 +101,58 @@ function asEscalation(v: unknown): Escalation {
  * и статусы. Статус несёт ревизию: побеждает бо́льшая, при равной — то, что уже на сервере.
  */
 @Injectable()
-export class SupportService {
+export class SupportService implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(STORAGE) private readonly storage: Storage) {}
+
+  private sweep: ReturnType<typeof setInterval> | null = null;
+
+  onModuleInit() {
+    void this.prune();
+    // раз в 6 часов; таймер не держит процесс
+    this.sweep = setInterval(() => void this.prune(), 6 * 3_600_000);
+    this.sweep.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.sweep) clearInterval(this.sweep);
+  }
+
+  /**
+   * Срок хранения (ТЗ v4.16): у заявок, решённых дольше `TICKET_KEEP_DAYS` назад (по умолчанию 90 дней),
+   * удаляется переписка — сообщения человека и ответы специалиста. Остаются сводка, статус и даты:
+   * для статистики и разбора этого достаточно, а личной переписки на сервере меньше.
+   */
+  async prune(now = Date.now()): Promise<number> {
+    const edge = now - config.ticketKeepDays * 24 * 3_600_000;
+    let n = 0;
+    for (const t of await this.storage.listTickets()) {
+      if (t.archived || t.escalation.status !== 'resolved') continue;
+      if (Date.parse(t.escalation.updatedAt) > edge) continue;
+      await this.storage.saveTicket({
+        ...t,
+        messages: [],
+        replies: [],
+        urgent: null,
+        archived: true,
+      });
+      n++;
+    }
+    if (n) console.log(`Срок хранения: переписка ${n} решённых заявок удалена, сводки остались`);
+    return n;
+  }
 
   /** Владелец передал обращение или что-то в нём изменилось (переписка, статус). */
   async push(
     user: User,
-    body: { taskId?: unknown; title?: unknown; escalation?: unknown; messages?: unknown },
+    body: {
+      taskId?: unknown;
+      title?: unknown;
+      escalation?: unknown;
+      messages?: unknown;
+      urgent?: unknown;
+    },
   ) {
+    const urgent = asUrgent(body.urgent);
     const taskId = typeof body?.taskId === 'string' ? body.taskId.slice(0, 100) : '';
     if (!taskId) throw new BadRequestException('taskId обязателен');
     const escalation = asEscalation(body.escalation);
@@ -109,6 +170,7 @@ export class SupportService {
         escalation: { ...escalation, rev: escalation.rev ?? 0 },
         messages,
         replies: [],
+        urgent,
         createdAt: now(),
         updatedAt: now(),
       });
@@ -122,6 +184,8 @@ export class SupportService {
       title,
       messages: afterHandoff(body.messages, next),
       escalation: next,
+      // просьба «Срочно» — решение владельца: последняя присланная (или снятая)
+      urgent,
       updatedAt: now(),
     });
   }
