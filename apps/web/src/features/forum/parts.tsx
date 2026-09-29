@@ -1,4 +1,5 @@
 import type { ForumSection, ForumThreadView, UserRole } from '@app/shared';
+import { useDm } from '@/features/dm/store';
 import {
   ArrowBigUp,
   CheckCircle2,
@@ -7,11 +8,13 @@ import {
   Headset,
   Link2,
   Lock,
+  MessageCircleQuestion,
   MessageSquare,
   MoreHorizontal,
   Pin,
   Sparkles,
 } from 'lucide-react';
+import { Avatar } from '@/components/ui/Avatar';
 import { Menu, type MenuItem } from '@/components/ui/Menu';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -58,10 +61,38 @@ export function VoteButton({
 }
 
 /** Автор: имя и пометка «Специалист» у сотрудников поддержки. */
-export function Author({ name, role }: { name: string; role: UserRole }) {
+export function Author({
+  name,
+  role,
+  userId,
+  avatar,
+}: {
+  name: string;
+  role: UserRole;
+  userId?: string;
+  /** Метка аватарки (ТЗ v4.18): есть — маленькая аватарка перед именем. */
+  avatar?: string;
+}) {
+  const openProfile = useDm((s) => s.openProfile);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="font-medium text-fg">{name}</span>
+      {avatar && userId && <Avatar name={name} userId={userId} avatar={avatar} size={20} />}
+      {userId ? (
+        // имя — профиль и «Написать» (ТЗ v4.17)
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openProfile(userId);
+          }}
+          className="relative z-10 rounded-[4px] font-medium text-fg underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+        >
+          {name}
+        </button>
+      ) : (
+        <span className="font-medium text-fg">{name}</span>
+      )}
       {role === 'specialist' && (
         <span className="inline-flex h-5 items-center gap-1 rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-on-accent-soft">
           <Headset size={11} aria-hidden />
@@ -92,7 +123,7 @@ export function ShareLink({ id }: { id: string }) {
   );
 }
 
-/** Пост в ленте БатФорума — карточка как на Reddit: голос слева, сообщество, заголовок, начало текста. */
+/** Пост в ленте Бат-Форума — карточка как на Reddit: голос слева, сообщество, заголовок, начало текста. */
 export function PostCard({
   t,
   section,
@@ -126,7 +157,12 @@ export function PostCard({
           )}
           {showCommunity && section && <span aria-hidden>·</span>}
           <span>
-            <Author name={t.authorName} role={t.authorRole} />
+            <Author
+              name={t.authorName}
+              role={t.authorRole}
+              userId={t.authorId}
+              avatar={t.authorAvatar}
+            />
           </span>
           <span aria-hidden>·</span>
           <time dateTime={t.createdAt}>{timeAgo(t.createdAt, now)}</time>
@@ -222,5 +258,32 @@ export function ForumFlash() {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * «Спросить лично» (ТЗ v4.19): личный вопрос по этой теме тому, кто в ней отвечал.
+ * Показывается, только если человек принимает личные вопросы и это не вы.
+ */
+export function AskButton({
+  threadId,
+  threadTitle,
+  user,
+}: {
+  threadId: string;
+  threadTitle: string;
+  user: { id: string; name: string; avatar?: string };
+}) {
+  const openAsk = useDm((s) => s.openAsk);
+  return (
+    <button
+      type="button"
+      onClick={() => openAsk({ threadId, threadTitle, user })}
+      aria-label={`Спросить лично: ${user.name}`}
+      className="inline-flex h-8 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium text-fg-muted transition-colors duration-200 hover:bg-sunken hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
+    >
+      <MessageCircleQuestion size={14} aria-hidden />
+      Спросить лично
+    </button>
   );
 }

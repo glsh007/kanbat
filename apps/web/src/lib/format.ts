@@ -57,3 +57,13 @@ export function timeAgo(iso: string, now: number): string {
   if (h < 48) return 'вчера';
   return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(iso));
 }
+
+/** «28 сентября 2026» — дата без времени. */
+export function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d
+        .toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+        .replace(/\s*г\.$/, '');
+}

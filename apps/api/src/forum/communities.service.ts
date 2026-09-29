@@ -35,7 +35,7 @@ export type CommunityDraftInput = {
 const str = (v: unknown) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
 
 /**
- * Сообщества БатФорума (ТЗ v4.7): хранятся в данных. Специалист создаёт, меняет и архивирует;
+ * Сообщества Бат-Форума (ТЗ v4.7): хранятся в данных. Специалист создаёт, меняет и архивирует;
  * сотрудник предлагает — предложение ждёт специалиста в «На проверке».
  */
 @Injectable()
@@ -57,7 +57,7 @@ export class CommunitiesService {
           // стартовые — в заданном порядке
           createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
           createdById: 'system',
-          createdByName: 'БатФорум',
+          createdByName: 'Бат-Форум',
         });
       }
     })();

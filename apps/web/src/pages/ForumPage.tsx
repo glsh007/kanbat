@@ -24,7 +24,7 @@ const SORTS: { id: ForumSort; label: string; icon: typeof Flame }[] = [
 ];
 
 /**
- * БатФорум (ТЗ v4.3, п. 16): по центру — строка поиска и лента рекомендаций;
+ * Бат-Форум (ТЗ v4.3, п. 16): по центру — строка поиска и лента рекомендаций;
  * если что-то ввести в поиск — вместо ленты результаты. Слева — о сообществе, справа — сообщества.
  */
 export function ForumPage() {
@@ -44,7 +44,7 @@ export function ForumPage() {
 
   const q = query.trim();
   const section = sections.find((s) => s.id === sectionId);
-  useNavTitle(section ? `БатФорум, ${handle(section)}` : 'БатФорум');
+  useNavTitle(section ? `Бат-Форум, ${handle(section)}` : 'Бат-Форум');
   // поиск в сообществе — по нему; «искать везде» — по всему форуму
   const scope = q && everywhere ? undefined : sectionId;
 

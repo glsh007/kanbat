@@ -115,7 +115,7 @@ docker compose start kanbat
 
 ```
 Браузер ──HTTPS──▶ Caddy (сертификат Let's Encrypt) ──▶ Канбат (Node.js: сайт + API)
-                                                        ├── data/kanbat.json — кабинеты, обращения, БатФорум
+                                                        ├── data/kanbat.json — кабинеты, обращения, Бат-Форум
                                                         └── Qwen в Yandex AI Studio (OpenAI-совместимый API)
 ```
 

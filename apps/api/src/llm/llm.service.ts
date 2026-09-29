@@ -333,36 +333,6 @@ export class LlmService {
   }
 
   /** Черновик темы форума из решённого обращения (без личных данных). Без модели — 503. */
-  async forumDraft(
-    history: ChatMessage[],
-    sections: { id: string; name: string }[],
-    requested?: string | null,
-  ): Promise<{ sectionId: string; title: string; body: string }> {
-    const model = await this.resolve(requested);
-    if (!model)
-      return this.withoutAi(() => ({
-        sectionId: 'other',
-        title: 'Решение из обращения',
-        body: '**Проблема:** …\n\n**Что помогло:**\n1. …',
-      }));
-    const ids = sections.map((s) => s.id);
-    const r = await this.guard('forum-draft', () =>
-      this.client.json<{ sectionId?: string; title?: string; body?: string }>(
-        model,
-        toOllama(P.FORUM_DRAFT(sections), this.trim(history)),
-        P.FORUM_DRAFT_SCHEMA(ids),
-      ),
-    );
-    return {
-      sectionId: ids.includes(r.sectionId ?? '') ? r.sectionId! : 'other',
-      title: (r.title ?? '')
-        .replace(/^["«']|["»']$/g, '')
-        .trim()
-        .slice(0, 150),
-      body: (r.body ?? '').trim().slice(0, 6000),
-    };
-  }
-
   /**
    * Подсказка сообщества для новой темы форума. Без модели — ошибка: вызывающий
    * переходит на подсказку по словам (и честно помечает её как «по словам»).

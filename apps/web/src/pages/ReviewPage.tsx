@@ -4,6 +4,7 @@ import {
   type CommunityProposal,
   type ForumReview,
   type ForumReviewItem,
+  type DmReportView,
 } from '@app/shared';
 import { Check, FolderInput, Lock, LockOpen, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useId, useState } from 'react';
@@ -25,19 +26,20 @@ import {
 import { useThreadActions } from '@/features/forum/ThreadActions';
 import { AppShell } from '@/layout/AppShell';
 import { useNavTitle } from '@/features/nav/useNavTitle';
-import { forumApi } from '@/lib/api';
+import { dmApi, forumApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { timeAgo } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 
 /**
- * «На проверке» (ТЗ v4.7, п. 16): специалист разбирает жалобы на темы БатФорума
+ * «На проверке» (ТЗ v4.7, п. 16): специалист разбирает жалобы на темы Бат-Форума
  * и предложения новых сообществ от сотрудников.
  */
 export function ReviewPage() {
   const specialist = useRole() === 'specialist';
   const [data, setData] = useState<ForumReview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dmReports, setDmReports] = useState<DmReportView[]>([]);
   const loadSections = useForumSections((s) => s.load);
   const refreshCount = useReviewCount((s) => s.refresh);
   useNavTitle('на проверке');
@@ -45,6 +47,7 @@ export function ReviewPage() {
   const reload = useCallback(async () => {
     try {
       setData(await forumApi.review());
+      setDmReports(await dmApi.reports());
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -64,13 +67,13 @@ export function ReviewPage() {
         <p className="p-6 text-sm text-fg-muted">
           Доступ только для специалистов поддержки.{' '}
           <Link to="/forum" className="font-medium text-heading underline underline-offset-4">
-            К БатФоруму
+            К Бат-Форуму
           </Link>
         </p>
       </AppShell>
     );
 
-  const empty = data && !data.reports.length && !data.proposals.length;
+  const empty = data && !data.reports.length && !data.proposals.length && !dmReports.length;
 
   return (
     <AppShell title="На проверке" subtitle={`${FORUM_NAME}: жалобы и предложения сообществ`}>
@@ -89,7 +92,7 @@ export function ReviewPage() {
               to="/forum"
               className="text-sm font-medium text-heading underline underline-offset-4"
             >
-              К БатФоруму
+              К Бат-Форуму
             </Link>
           </div>
         )}
@@ -115,6 +118,59 @@ export function ReviewPage() {
             <ul className="flex flex-col gap-3">
               {data.proposals.map((p) => (
                 <ProposalCard key={p.id} p={p} onDone={() => void reload()} />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {dmReports.length > 0 && (
+          <section aria-labelledby="rv-dm" className="flex flex-col gap-3">
+            <h2 id="rv-dm" className="font-serif text-xl font-medium">
+              Жалобы в сообщениях · {dmReports.length}
+            </h2>
+            <p className="text-sm text-fg-muted">
+              Видны только последние сообщения того, на кого пожаловались, — не вся переписка.
+              Собеседник уже заблокирован автором жалобы.
+            </p>
+            <ul className="flex flex-col gap-3">
+              {dmReports.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4"
+                >
+                  <p className="text-sm">
+                    <span className="font-medium text-heading">{r.reporterName}</span>{' '}
+                    пожаловался(-ась) на{' '}
+                    <span className="font-medium text-heading">{r.reportedName}</span>
+                  </p>
+                  <p className="text-sm">«{r.reason}»</p>
+                  {r.messages.length > 0 ? (
+                    <ol
+                      className="flex flex-col gap-1 border-l-2 border-line pl-3 text-sm text-fg-muted"
+                      aria-label="Сообщения, на которые пожаловались"
+                    >
+                      {r.messages.map((m, i) => (
+                        <li key={i} className="whitespace-pre-wrap">
+                          {m.text}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="text-sm text-fg-muted">
+                      Сообщений от этого человека в переписке нет.
+                    </p>
+                  )}
+                  <div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Check size={16} />}
+                      onClick={() => void dmApi.resolveReport(r.id).then(reload)}
+                    >
+                      Рассмотрено
+                    </Button>
+                  </div>
+                </li>
               ))}
             </ul>
           </section>

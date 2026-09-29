@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Копия данных Канбата (кабинеты, обращения, БатФорум): /root/kanbat-backups, хранится 14 дней.
+# Копия данных Канбата (кабинеты, обращения, Бат-Форум): /root/kanbat-backups, хранится 14 дней.
 # Восстановить: docker compose stop kanbat && tar -xzf <копия> -C <папка kanbat> && docker compose start kanbat
 set -euo pipefail
 cd "$(dirname "$0")/.."

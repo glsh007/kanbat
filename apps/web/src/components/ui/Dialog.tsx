@@ -91,9 +91,10 @@ export function Dialog({ open, onClose, title, description, children, footer }: 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}
-            className="relative flex w-full max-w-md flex-col gap-4 rounded-t-panel border border-line bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-fg shadow-raised outline-none sm:rounded-panel"
+            // не выше экрана: шапка и кнопки на месте, середина прокручивается (крупный шрифт, длинные настройки)
+            className="relative flex max-h-[calc(100dvh-1rem)] w-full max-w-md flex-col gap-4 rounded-t-panel border border-line bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-fg shadow-raised outline-none sm:max-h-[calc(100dvh-3rem)] sm:rounded-panel"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex shrink-0 items-start gap-3">
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className="text-lg">
                   {title}
@@ -112,8 +113,10 @@ export function Dialog({ open, onClose, title, description, children, footer }: 
                 className="-mt-1 -mr-1"
               />
             </div>
-            {children}
-            {footer && <div className="flex flex-wrap justify-end gap-2">{footer}</div>}
+            {children != null && children !== false && (
+              <div className="-mx-5 -my-1 min-h-0 overflow-y-auto px-5 py-1">{children}</div>
+            )}
+            {footer && <div className="flex shrink-0 flex-wrap justify-end gap-2">{footer}</div>}
           </motion.div>
         </div>
       )}

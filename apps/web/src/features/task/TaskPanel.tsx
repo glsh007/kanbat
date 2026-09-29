@@ -1,19 +1,27 @@
 import { isBackwardMove, isProblemTask, type ColumnId } from '@app/shared';
 import { Check, CheckCheck, Headset, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import * as agent from '@/features/agent/agent';
 import { useLlmStatus } from '@/features/agent/llmStatus';
 import { ReworkDialog } from '@/features/board/ReworkDialog';
 import { useBoard, useViewMode } from '@/features/board/store';
 import { cn } from '@/lib/cn';
+import { usePanelWidth } from '@/lib/panelWidth';
 import { QuestionDock } from './QuestionDock';
 import { UrgentDialog } from './UrgentDialog';
 import { URGENT_NOTE, UrgentMark } from '@/components/ui/UrgentMark';
 import { Composer, type ComposerHandle } from './Composer';
-import { ShareSolution } from '@/features/forum/ShareSolution';
 import { MessageList } from './MessageList';
 import { TaskHeader } from './TaskHeader';
 
@@ -71,6 +79,8 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
   const messages = useBoard((s) => s.messages[taskId]);
   const live = useBoard((s) => s.live[taskId]);
   const [fullscreen, setFullscreen] = useState(false);
+  // ширина чата поверх доски — за левый край (ТЗ v4.18)
+  const panelW = usePanelWidth('board-chat', 560, 420, 1400);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -170,16 +180,21 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.25, ease: [0.2, 0.7, 0.2, 1] }}
+      style={{ '--panel-w': `${panelW.width}px` } as CSSProperties}
       className={cn(
         'fixed inset-0 z-30 flex flex-col bg-canvas',
         main
           ? 'lg:static lg:z-auto lg:min-w-0 lg:flex-1'
           : fullscreen
             ? 'lg:fixed lg:inset-0'
-            : // доска: чат выезжает поверх столбцов, доска под ним не сдвигается и не сужается
-              'lg:absolute lg:inset-y-0 lg:right-0 lg:left-auto lg:z-20 lg:w-[45%] lg:min-w-[420px] lg:border-l lg:border-line lg:shadow-raised',
+            : // доска: чат выезжает поверх столбцов, доска под ним не сдвигается и не сужается;
+              // ширину можно менять за левый край (не шире доски без 3rem)
+              'lg:absolute lg:inset-y-0 lg:right-0 lg:left-auto lg:z-20 lg:w-[min(var(--panel-w),calc(100%-3rem))] lg:border-l lg:border-line lg:shadow-raised',
       )}
     >
+      {!main && !fullscreen && (
+        <ResizeHandle panel={panelW} edge="left" label="Ширина окна обращения" />
+      )}
       <div ref={titleRef} tabIndex={-1} className="outline-none">
         <TaskHeader
           task={task}
@@ -335,10 +350,6 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
               <span className="text-sm text-fg-muted">если помощь не нужна</span>
             </div>
           )}
-          {task.column === 'done' &&
-            task.status === 'idle' &&
-            task.triage?.meaningful !== false &&
-            (messages?.length ?? 0) > 2 && <ShareSolution task={task} messages={messages ?? []} />}
           {task.column === 'draft' && task.status === 'idle' && (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => void agent.start(task.id)}>

@@ -1,4 +1,4 @@
-import { Building2, MessagesSquare, ShieldAlert } from 'lucide-react';
+import { Building2, MessageCircle, MessagesSquare, ShieldAlert } from 'lucide-react';
 import { Link, NavLink, useLocation } from 'react-router';
 import { Logo } from '@/brand/Logo';
 import { MadeBy } from '@/brand/MadeBy';
@@ -9,6 +9,7 @@ import { useReviewCount, useReviewPolling } from '@/features/forum/sections';
 import { QUEUES, queuePath, useQueueCounts, type Queue } from '@/features/support/data';
 import { useUser } from '@/lib/session';
 import { navItemClass } from './navItem';
+import { DmBadge } from '@/features/dm/DmBadge';
 import { UserCard } from './UserCard';
 
 /** Какая очередь открыта: /support → «Все», /support/new/t/… → «Новые». */
@@ -20,7 +21,7 @@ function activeQueue(pathname: string): Queue | null {
 }
 
 /**
- * Меню специалиста (ТЗ v4.4, п. 14): вместо личных разделов — очереди заявок и БатФорум.
+ * Меню специалиста (ТЗ v4.4, п. 14): вместо личных разделов — очереди заявок и Бат-Форум.
  * Личной доски у специалиста нет — только пульт поддержки.
  */
 export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -74,7 +75,12 @@ export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
         <h2 className="px-3 pt-4 pb-1 text-xs font-medium text-fg-muted">Сообщество</h2>
         <NavLink to="/forum" end className={navItemClass} onClick={onNavigate}>
           <MessagesSquare size={18} aria-hidden />
-          <span className="min-w-0 flex-1 truncate">БатФорум</span>
+          <span className="min-w-0 flex-1 truncate">Бат-Форум</span>
+        </NavLink>
+        <NavLink to="/messages" className={navItemClass} onClick={onNavigate}>
+          <MessageCircle size={18} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">Бат-общение</span>
+          <DmBadge />
         </NavLink>
         <NavLink to="/forum/review" className={navItemClass} onClick={onNavigate}>
           <ShieldAlert size={18} aria-hidden />

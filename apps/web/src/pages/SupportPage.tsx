@@ -160,7 +160,8 @@ export function SupportPage() {
           onClose={close}
         />
       ) : (
-        <div className="flex min-h-full md:h-full">
+        // relative: открытая заявка (lg) лежит поверх доски, а не рядом с ней — столбцы не сужаются
+        <div className="relative flex min-h-full md:h-full">
           <div className="min-w-0 flex-1">
             <SupportBoard
               activeId={taskId}

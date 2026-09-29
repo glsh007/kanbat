@@ -28,6 +28,13 @@ import type {
   ReportReason,
   OrgProfile,
   OrgState,
+  DmChatCard,
+  DmMessageView,
+  DmArchiveCard,
+  DmArchiveView,
+  DmProfileView,
+  DmReportView,
+  DmUnread,
 } from '@app/shared';
 import { authHeaders, sessionExpired } from './session';
 
@@ -306,9 +313,6 @@ export const forumApi = {
     request<ForumThreadPage>('POST', `/api/forum/threads/${id}/reports/dismiss`, {}),
   removeThread: (id: string) => request<void>('DELETE', `/api/forum/threads/${id}`),
   removeReply: (id: string) => request<ForumThreadPage>('DELETE', `/api/forum/replies/${id}`),
-  /** Черновик темы из решённого обращения (ИИ убирает личные данные). */
-  draft: (messages: ChatMessage[], model: string | null) =>
-    request<ForumDraft>('POST', '/api/llm/forum-draft', { messages, model }),
   /** Подсказка сообщества для новой темы: ИИ или совпадение слов. */
   suggest: (title: string, body: string, model: string | null, signal?: AbortSignal) =>
     request<CommunitySuggestion>('POST', '/api/llm/forum-suggest', { title, body, model }, signal),
@@ -346,4 +350,35 @@ export const orgApi = {
       { profile, question, model },
       signal,
     ),
+};
+
+/** Личные сообщения (ТЗ v4.17). */
+export const dmApi = {
+  profile: (key: string) =>
+    request<DmProfileView>('GET', `/api/dm/profile/${encodeURIComponent(key)}`),
+  chats: () => request<DmChatCard[]>('GET', '/api/dm/chats'),
+  unread: () => request<DmUnread>('GET', '/api/dm/unread'),
+  /** «Спросить лично» / «Спросить снова»: тема, человек, вопрос (ТЗ v4.19). */
+  ask: (threadId: string, userId: string, text: string) =>
+    request<DmChatCard>('POST', '/api/dm/requests', { threadId, userId, text }),
+  accept: (id: string) => request<DmChatCard>('POST', `/api/dm/chats/${id}/accept`),
+  decline: (id: string) => request<{ ok: true }>('POST', `/api/dm/chats/${id}/decline`),
+  solve: (id: string) => request<{ archiveId: string | null }>('POST', `/api/dm/chats/${id}/solve`),
+  end: (id: string) => request<{ archiveId: string | null }>('POST', `/api/dm/chats/${id}/end`),
+  block: (id: string) => request<{ archiveId: string | null }>('POST', `/api/dm/chats/${id}/block`),
+  unblock: (userId: string) => request<{ ok: true }>('POST', `/api/dm/users/${userId}/unblock`),
+  remove: (id: string) => request<{ ok: true }>('DELETE', `/api/dm/chats/${id}`),
+  messages: (id: string) =>
+    request<{ chat: DmChatCard; messages: DmMessageView[] }>('GET', `/api/dm/chats/${id}/messages`),
+  send: (id: string, text: string) =>
+    request<DmMessageView>('POST', `/api/dm/chats/${id}/messages`, { text }),
+  report: (id: string, reason: string) =>
+    request<{ ok: true; archiveId: string | null }>('POST', `/api/dm/chats/${id}/report`, {
+      reason,
+    }),
+  archive: () => request<DmArchiveCard[]>('GET', '/api/dm/archive'),
+  archived: (id: string) => request<DmArchiveView>('GET', `/api/dm/archive/${id}`),
+  removeArchived: (id: string) => request<{ ok: true }>('DELETE', `/api/dm/archive/${id}`),
+  reports: () => request<DmReportView[]>('GET', '/api/dm/reports'),
+  resolveReport: (id: string) => request<unknown>('POST', `/api/dm/reports/${id}/resolve`),
 };

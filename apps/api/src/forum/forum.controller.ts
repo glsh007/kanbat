@@ -4,7 +4,7 @@ import type { User } from '../store/types';
 import type { CommunityDraftInput } from './communities.service';
 import { ForumService } from './forum.service';
 
-/** БатФорум (ТЗ v4.2–4.7, п. 16). Все запросы — от вошедших пользователей. */
+/** Бат-Форум (ТЗ v4.2–4.7, п. 16). Все запросы — от вошедших пользователей. */
 @Controller('forum')
 export class ForumController {
   constructor(private readonly forum: ForumService) {}

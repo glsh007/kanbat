@@ -12,6 +12,10 @@ import type {
   Ticket,
   User,
   UserRole,
+  DmArchiveEntry,
+  DmChat,
+  DmMessage,
+  DmReport,
 } from './types';
 
 type Data = {
@@ -26,6 +30,13 @@ type Data = {
   forumThreads: Record<string, ForumThread>;
   forumReplies: Record<string, ForumReply>;
   forumCommunities: Record<string, ForumCommunity>;
+  dmChats: Record<string, DmChat>;
+  dmMessages: Record<string, DmMessage[]>;
+  dmReports: Record<string, DmReport>;
+  /** Архивы Бат-общения: копии закрытых переписок, у каждого своя. */
+  dmArchive: Record<string, DmArchiveEntry>;
+  /** Фото-аватарки: тип и base64 (до 200 КБ каждая). */
+  avatars: Record<string, { mime: string; data: string }>;
 };
 
 const HOUR = 3_600_000;
@@ -42,6 +53,11 @@ const empty = (): Data => ({
   forumThreads: {},
   forumReplies: {},
   forumCommunities: {},
+  dmChats: {},
+  dmMessages: {},
+  dmReports: {},
+  dmArchive: {},
+  avatars: {},
 });
 
 /**
@@ -122,6 +138,18 @@ export class FileStorage implements Storage {
       ) ?? null
     );
   }
+  async findByUsername(username: string) {
+    const u = username.toLowerCase();
+    return Object.values(this.data.users).find((x) => x.username === u) ?? null;
+  }
+  async searchUsers(query: string, limit: number) {
+    const q = query.toLowerCase().replace(/^@/, '').trim();
+    if (!q) return [];
+    return Object.values(this.data.users)
+      .filter((x) => x.username && (x.username.startsWith(q) || x.name.toLowerCase().includes(q)))
+      .sort((a, b) => Number(!a.username!.startsWith(q)) - Number(!b.username!.startsWith(q)))
+      .slice(0, limit);
+  }
   async getUser(id: string) {
     return this.data.users[id] ?? null;
   }
@@ -136,8 +164,27 @@ export class FileStorage implements Storage {
     return user;
   }
 
+  async listUsers() {
+    return Object.values(this.data.users);
+  }
+  async getAvatar(userId: string) {
+    return this.data.avatars[userId] ?? null;
+  }
+  async setAvatar(userId: string, photo: { mime: string; data: string } | null) {
+    if (photo) this.data.avatars[userId] = photo;
+    else delete this.data.avatars[userId];
+    this.schedule();
+  }
+
+  /** Отметка «пользовался Канбатом» — для автоудаления после года без входа (ТЗ v4.18). */
+  private touch(userId: string, at: string) {
+    const u = this.data.users[userId];
+    if (u) this.data.users[userId] = { ...u, lastActiveAt: at };
+  }
+
   async deleteUser(id: string) {
     delete this.data.users[id];
+    delete this.data.avatars[id];
     delete this.data.boards[id];
     for (const [token, userId] of Object.entries(this.data.sessions))
       if (userId === id) {
@@ -146,6 +193,17 @@ export class FileStorage implements Storage {
       }
     for (const [tid, t] of Object.entries(this.data.tickets))
       if (t.ownerId === id) delete this.data.tickets[tid];
+    // личные сообщения: переписки с участием пользователя удаляются целиком, его жалобы — тоже
+    for (const [cid, c] of Object.entries(this.data.dmChats))
+      if (c.members.includes(id)) {
+        delete this.data.dmChats[cid];
+        delete this.data.dmMessages[cid];
+      }
+    for (const [rid, r] of Object.entries(this.data.dmReports))
+      if (r.reporterId === id || r.reportedId === id) delete this.data.dmReports[rid];
+    // свой архив Бат-общения — целиком; копии у собеседников остаются у них
+    for (const [aid, e] of Object.entries(this.data.dmArchive))
+      if (e.ownerId === id) delete this.data.dmArchive[aid];
     // форум: темы и ответы пользователя удаляются, его голоса снимаются
     for (const t of Object.values(this.data.forumThreads))
       if (t.authorId === id) this.dropThread(t.id);
@@ -224,9 +282,71 @@ export class FileStorage implements Storage {
     return c;
   }
 
+  // ——— личные сообщения (ТЗ v4.17) ———
+  async listChatsOf(userId: string) {
+    return Object.values(this.data.dmChats).filter((c) => c.members.includes(userId));
+  }
+  async getChat(id: string) {
+    return this.data.dmChats[id] ?? null;
+  }
+  async chatAbout(a: string, b: string, topicId: string) {
+    return (
+      Object.values(this.data.dmChats).find(
+        (c) => c.members.includes(a) && c.members.includes(b) && c.topicId === topicId,
+      ) ?? null
+    );
+  }
+  async listChats() {
+    return Object.values(this.data.dmChats);
+  }
+  async listArchive(ownerId: string) {
+    return Object.values(this.data.dmArchive).filter((e) => e.ownerId === ownerId);
+  }
+  async getArchive(id: string) {
+    return this.data.dmArchive[id] ?? null;
+  }
+  async saveArchive(entry: DmArchiveEntry) {
+    this.data.dmArchive[entry.id] = entry;
+    this.schedule();
+    return entry;
+  }
+  async deleteArchive(id: string) {
+    delete this.data.dmArchive[id];
+    this.schedule();
+  }
+  async saveChat(chat: DmChat) {
+    this.data.dmChats[chat.id] = chat;
+    this.schedule();
+    return chat;
+  }
+  async deleteChat(id: string) {
+    delete this.data.dmChats[id];
+    delete this.data.dmMessages[id];
+    this.schedule();
+  }
+  async listDm(chatId: string) {
+    return this.data.dmMessages[chatId] ?? [];
+  }
+  async saveDm(message: DmMessage) {
+    const list = this.data.dmMessages[message.chatId] ?? [];
+    // храним последние 2000 сообщений переписки
+    this.data.dmMessages[message.chatId] = [...list, message].slice(-2000);
+    this.schedule();
+    return message;
+  }
+  async listDmReports() {
+    return Object.values(this.data.dmReports);
+  }
+  async saveDmReport(report: DmReport) {
+    this.data.dmReports[report.id] = report;
+    this.schedule();
+    return report;
+  }
+
   async createSession(token: string, userId: string) {
     this.data.sessions[token] = userId;
     this.data.sessionSeen[token] = new Date().toISOString();
+    this.touch(userId, this.data.sessionSeen[token]);
     this.schedule();
   }
   /**
@@ -247,6 +367,7 @@ export class FileStorage implements Storage {
     // старые входы (до v4.16) без отметки — отсчёт с сегодняшнего дня
     if (!Number.isFinite(seen) || now - seen > HOUR) {
       this.data.sessionSeen[token] = new Date(now).toISOString();
+      this.touch(userId, this.data.sessionSeen[token]);
       this.schedule();
     }
     return userId;

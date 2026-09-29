@@ -5,6 +5,7 @@ import { recoverInterrupted } from '@/features/agent/agent';
 import { resetBoardForLogin, useBoard } from '@/features/board/store';
 import { lastLoadError, startSaving, stopSaving } from '@/features/board/serverStorage';
 import { startTicketSync } from '@/features/support/sync';
+import { startDmPolling } from '@/features/dm/store';
 import { startTicketsPolling } from '@/features/support/tickets';
 import { useSession } from '@/lib/session';
 import { LoginPage } from '@/pages/LoginPage';
@@ -51,6 +52,12 @@ export function SessionGate({ children }: { children: ReactNode }) {
       void stopSaving();
     };
   }, [token, role, attempt]);
+
+  // личные сообщения — у всех: счётчик непрочитанных в меню (ТЗ v4.17)
+  useEffect(() => {
+    if (!token || phase !== 'ready') return;
+    return startDmPolling();
+  }, [token, phase]);
 
   // пульт специалиста — заявки всех сотрудников
   useEffect(() => {

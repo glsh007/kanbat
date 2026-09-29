@@ -42,7 +42,7 @@ type Props = {
   onSubmit: (d: CommunityDraft) => Promise<void>;
 };
 
-/** Создать, предложить, изменить или одобрить сообщество БатФорума (ТЗ v4.7). */
+/** Создать, предложить, изменить или одобрить сообщество Бат-Форума (ТЗ v4.7). */
 export function CommunityDialog({ open, mode, initial, onClose, onSubmit }: Props) {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');

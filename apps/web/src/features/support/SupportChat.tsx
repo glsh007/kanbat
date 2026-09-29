@@ -1,11 +1,13 @@
 import { ESCALATION_LABELS, type Ticket } from '@app/shared';
 import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { Logo } from '@/brand/Logo';
+import { ListEdge } from '@/components/ui/ResizeHandle';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
 import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
+import { usePanelWidth } from '@/lib/panelWidth';
 import { useNow } from '@/lib/useNow';
 import {
   agoLabel,
@@ -132,6 +134,7 @@ export function SupportChat({
 }) {
   const by = useQueue(queue, sort, meId);
   const [showDone, setShowDone] = useState(false);
+  const listWidth = usePanelWidth('tickets', 360, 280, 640);
   const single = queueInfo(queue).status;
   const waiting = [...by.new, ...by.in_progress];
   const total = waiting.length + by.answered.length + by.resolved.length;
@@ -139,8 +142,9 @@ export function SupportChat({
   return (
     <div className="flex min-h-full md:h-full">
       <div
+        style={{ '--panel-w': `${listWidth.width}px` } as CSSProperties}
         className={cn(
-          'scroll-paper flex w-full flex-col gap-2 p-2 sm:p-3 lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-line',
+          'scroll-paper flex w-full flex-col gap-2 p-2 sm:p-3 lg:w-[var(--panel-w)] lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-line',
         )}
       >
         {total === 0 ? (
@@ -181,6 +185,7 @@ export function SupportChat({
           </>
         )}
       </div>
+      <ListEdge panel={listWidth} label="Ширина списка заявок" />
 
       {activeId ? (
         <SpecialistPanel key={activeId} taskId={activeId} onClose={onClose} layout="main" />

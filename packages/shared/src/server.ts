@@ -9,6 +9,8 @@ export type UserRole = 'employee' | 'specialist';
 export interface User {
   id: string;
   name: string;
+  /** Ник (ТЗ v4.17): уникальный, по нему входят и находят друг друга. Нет — кабинет до регистрации. */
+  username?: string;
   role: UserRole;
   /** IANA, например `Asia/Yekaterinburg` — для отложенной отправки (позже). */
   timezone?: string;
@@ -16,6 +18,18 @@ export interface User {
   scheme?: string;
   /** Администратор организации (ТЗ v4.12): вошёл с кодом администратора. */
   admin?: boolean;
+  /** Метка аватарки (ТЗ v4.18): `preset:p3` или `photo:<версия>`; нет — буква имени. */
+  avatar?: string;
+  /** Есть ли фраза для восстановления доступа и когда создана (ТЗ v4.18). */
+  hasRecovery?: boolean;
+  recoveryAt?: string;
+  /** Удалить аккаунт после года без входа (ТЗ v4.18). */
+  autoDelete?: boolean;
+  lastActiveAt?: string;
+  /** Не принимать личные вопросы в Бат-общении (ТЗ v4.19). */
+  dmOff?: boolean;
+  /** Кого человек заблокировал в Бат-общении (id). */
+  dmBlocked?: string[];
   createdAt: string;
 }
 

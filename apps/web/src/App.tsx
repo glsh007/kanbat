@@ -13,6 +13,9 @@ import { SupportPage } from '@/pages/SupportPage';
 import { ForumPage } from '@/pages/ForumPage';
 import { ReviewPage } from '@/pages/ReviewPage';
 import { ThreadPage } from '@/pages/ThreadPage';
+import { MessagesPage } from '@/pages/MessagesPage';
+import { AskDialog } from '@/features/dm/AskDialog';
+import { ProfileDialog } from '@/features/dm/ProfileDialog';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 
 const DesignPage = lazy(() => import('@/pages/DesignPage'));
@@ -67,9 +70,15 @@ export function App() {
                   <Route path="/support/:queue" element={<SupportPage />} />
                   <Route path="/support/:queue/t/:taskId" element={<SupportPage />} />
                   <Route path="/org" element={<OrgPage />} />
+                  <Route path="/messages" element={<MessagesPage />} />
+                  <Route path="/messages/:chatId" element={<MessagesPage />} />
+                  <Route path="/messages/archive/:archiveId" element={<MessagesPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
+                {/* профиль человека — открывается из имени автора и поиска (ТЗ v4.17) */}
+                <ProfileDialog />
+                <AskDialog />
               </Suspense>
             </AppHistory>
           </BrowserRouter>

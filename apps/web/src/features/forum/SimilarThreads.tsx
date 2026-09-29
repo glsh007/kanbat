@@ -6,7 +6,7 @@ import { forumApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
 /**
- * «Похожие обсуждения на БатФоруме» — подсказка по тексту обращения:
+ * «Похожие обсуждения на Бат-Форуме» — подсказка по тексту обращения:
  * часто ответ уже есть, и обращение создавать не нужно.
  */
 export function SimilarThreads({ text, className }: { text: string; className?: string }) {
@@ -34,7 +34,7 @@ export function SimilarThreads({ text, className }: { text: string; className?: 
   if (!items.length) return null;
   return (
     <section
-      aria-label="Похожие обсуждения на БатФоруме"
+      aria-label="Похожие обсуждения на Бат-Форуме"
       className={cn(
         'flex flex-col gap-1.5 rounded-card border border-line bg-surface p-3',
         className,
@@ -42,7 +42,7 @@ export function SimilarThreads({ text, className }: { text: string; className?: 
     >
       <h3 className="flex items-center gap-1.5 text-sm font-medium text-heading">
         <MessagesSquare size={16} aria-hidden />
-        Похожие обсуждения на БатФоруме
+        Похожие обсуждения на Бат-Форуме
       </h3>
       <ul className="flex flex-col">
         {items.map((t) => (

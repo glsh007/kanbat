@@ -4,6 +4,7 @@ import {
   Hand,
   ListPlus,
   LoaderCircle,
+  MessageCircle,
   MessagesSquare,
   MoreHorizontal,
   Pencil,
@@ -27,10 +28,11 @@ import { useAddToSection } from '@/features/sections/addStore';
 import { sortSection } from '@/features/sections/sorter';
 import { cn } from '@/lib/cn';
 import { navItemClass } from './navItem';
+import { DmBadge } from '@/features/dm/DmBadge';
 import { UserCard } from './UserCard';
 
 /**
- * Меню сотрудника: логотип, его разделы, БатФорум, тема.
+ * Меню сотрудника: логотип, его разделы, Бат-Форум, тема.
  * Используется и в боковой панели (desktop), и в выдвижном листе (mobile).
  */
 export function SectionNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -170,7 +172,12 @@ export function SectionNav({ onNavigate }: { onNavigate?: () => void }) {
         <h2 className="px-3 pt-4 pb-1 text-xs font-medium text-fg-muted">Сообщество</h2>
         <NavLink to="/forum" className={navItemClass} onClick={onNavigate}>
           <MessagesSquare size={18} aria-hidden />
-          <span className="min-w-0 flex-1 truncate">БатФорум</span>
+          <span className="min-w-0 flex-1 truncate">Бат-Форум</span>
+        </NavLink>
+        <NavLink to="/messages" className={navItemClass} onClick={onNavigate}>
+          <MessageCircle size={18} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">Бат-общение</span>
+          <DmBadge />
         </NavLink>
       </nav>
 

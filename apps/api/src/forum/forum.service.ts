@@ -39,7 +39,7 @@ const isHidden = (t: ForumThread) => (t.reports?.length ?? 0) >= HIDE_AFTER_REPO
 const cleanTitle = (v: unknown) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
 
 /**
- * БатФорум: сообщества, темы, ответы, «Полезно», решение. Пишут все; модерируют специалисты
+ * Бат-Форум: сообщества, темы, ответы, «Полезно», решение. Пишут все; модерируют специалисты
  * (решение, закрепление, перенос, закрытие, заголовок, удаление, жалобы); автор может удалить
  * и переименовать своё. От мусора — фильтр текста и лимиты частоты (ТЗ v4.7, п. 16).
  */
@@ -67,6 +67,21 @@ export class ForumService implements OnModuleInit {
     await this.storage.setMeta('forumSeeded', '1');
   }
 
+  /** Метки аватарок авторов (ТЗ v4.18) — обновляются в начале каждого запроса с темами. */
+  private avatars: Record<string, string> = {};
+  /** Кто принимает личные вопросы (ТЗ v4.19) — у их тем и ответов кнопка «Спросить лично». */
+  private askable = new Set<string>();
+  private async loadAvatars() {
+    const map: Record<string, string> = {};
+    const open = new Set<string>();
+    for (const u of await this.storage.listUsers()) {
+      if (u.avatar) map[u.id] = u.avatar;
+      if (!u.dmOff) open.add(u.id);
+    }
+    this.avatars = map;
+    this.askable = open;
+  }
+
   private view(t: ForumThread, me: User, full = false, because?: string) {
     const specialist = me.role === 'specialist';
     return {
@@ -75,8 +90,11 @@ export class ForumService implements OnModuleInit {
       sectionId: t.sectionId,
       title: t.title,
       body: full ? t.body : t.body.replace(/[*#>`_]/g, '').slice(0, 220),
+      authorId: t.authorId,
       authorName: t.authorName,
       authorRole: t.authorRole,
+      ...(this.avatars[t.authorId] ? { authorAvatar: this.avatars[t.authorId] } : {}),
+      authorAsk: t.authorId !== me.id && this.askable.has(t.authorId),
       mine: t.authorId === me.id,
       score: t.voters.length,
       voted: t.voters.includes(me.id),
@@ -98,8 +116,11 @@ export class ForumService implements OnModuleInit {
     return {
       id: r.id,
       body: r.body,
+      authorId: r.authorId,
       authorName: r.authorName,
       authorRole: r.authorRole,
+      ...(this.avatars[r.authorId] ? { authorAvatar: this.avatars[r.authorId] } : {}),
+      authorAsk: r.authorId !== me.id && this.askable.has(r.authorId),
       mine: r.authorId === me.id,
       score: r.voters.length,
       voted: r.voters.includes(me.id),
@@ -168,6 +189,7 @@ export class ForumService implements OnModuleInit {
   }
 
   async list(me: User, opts: { section?: string; sort?: string; q?: string }) {
+    await this.loadAvatars();
     const q = stems(opts.q ?? '');
     let list = (await this.storage.listThreads()).filter((t) => this.visible(t, me));
     if (opts.section && (await this.communities.isActive(opts.section)))
@@ -225,6 +247,7 @@ export class ForumService implements OnModuleInit {
 
   /** Похожие обсуждения для текста обращения (подсказка перед отправкой). */
   async similar(me: User, text: string) {
+    await this.loadAvatars();
     const q = stems(text);
     if (q.length < 1) return [];
     return (
@@ -254,6 +277,7 @@ export class ForumService implements OnModuleInit {
   }
 
   async get(me: User, id: string) {
+    await this.loadAvatars();
     const t = await this.loadVisible(me, id);
     const replies = (await this.storage.listReplies(id)).sort((a, b) =>
       a.id === t.solutionId
@@ -282,6 +306,7 @@ export class ForumService implements OnModuleInit {
     me: User,
     body: { sectionId?: unknown; title?: unknown; body?: unknown; fromRequest?: unknown },
   ) {
+    await this.loadAvatars();
     // на форуме всё публично: СНИЛС, паспорт и карты скрываем (ТЗ v4.16)
     const title = maskPersonalData(cleanTitle(body?.title)).text;
     const text = typeof body?.body === 'string' ? maskPersonalData(body.body.trim()).text : '';
@@ -561,6 +586,7 @@ export class ForumService implements OnModuleInit {
   // ——— «На проверке» для специалиста ———
 
   async review(me: User) {
+    await this.loadAvatars();
     this.specialist(me, 'Очередь проверки');
     const reported = (await this.storage.listThreads())
       .filter((t) => (t.reports?.length ?? 0) > 0)

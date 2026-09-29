@@ -6,7 +6,13 @@ export type UserRole = 'employee' | 'specialist';
 
 export interface User {
   id: string;
+  /** Как обращаться к человеку (отображается везде). */
   name: string;
+  /**
+   * Ник (ТЗ v4.17): уникальный, латиница, цифры и «_», 3–20 символов, хранится в нижнем регистре.
+   * По нему входят и находят друг друга в «Сообщениях». У кабинетов до регистрации — нет, пока не придумают.
+   */
+  username?: string;
   role: UserRole;
   timezone?: string;
   /** Цветовая схема интерфейса (ТЗ v4.11): terracotta, sage, sea… Нет — по умолчанию. */
@@ -19,6 +25,19 @@ export interface User {
   createdAt: string;
   /** scrypt-хэш пароля личного кабинета (клиенту не отдаётся). Нет — кабинет создан до паролей. */
   passwordHash?: string;
+  /** Аватарка (ТЗ v4.18): `preset:p3` — готовый рисунок, `photo:<версия>` — своё фото. */
+  avatar?: string;
+  /** scrypt-хэш фразы для восстановления доступа (клиенту не отдаётся) и когда она создана. */
+  recoveryHash?: string;
+  recoveryAt?: string;
+  /** Удалить аккаунт после года без входа (ТЗ v4.18, включается в «Настройках»). */
+  autoDelete?: boolean;
+  /** Когда человек последний раз пользовался Канбатом (не чаще раза в час). */
+  lastActiveAt?: string;
+  /** Не принимать личные вопросы в Бат-общении (ТЗ v4.19). */
+  dmOff?: boolean;
+  /** Кого человек заблокировал в Бат-общении. */
+  dmBlocked?: string[];
 }
 
 export interface BoardBlob {
@@ -106,7 +125,7 @@ export interface ForumReport {
 /** active — видно всем; proposed — предложил сотрудник; rejected — отклонено; archived — в архиве. */
 export type CommunityStatus = 'active' | 'proposed' | 'rejected' | 'archived';
 
-/** Сообщество БатФорума (v4.7: хранится в данных, а не в коде). */
+/** Сообщество Бат-Форума (v4.7: хранится в данных, а не в коде). */
 export interface ForumCommunity {
   id: string;
   slug: string;
@@ -136,6 +155,73 @@ export interface ForumReply {
   createdAt: string;
 }
 
+// ——— Бат-общение (ТЗ v4.17, по темам форума — v4.19) ———
+
+/** pending — вопрос ждёт ответа; active — переписка. Закрытая переписка стирается, копии — в архивах. */
+export type DmStatus = 'pending' | 'active';
+
+export type DmCloseReason =
+  'solved' | 'helper_ended' | 'quiet' | 'total' | 'declined' | 'unanswered' | 'blocked' | 'legacy';
+
+export interface DmChat {
+  id: string;
+  /** Двое участников (id). */
+  members: [string, string];
+  status: DmStatus;
+  /** Кто спросил (спрашивающий); второй — помогающий. */
+  requestedBy: string;
+  /** Тема Бат-Форума, по которой переписка, и её заголовок на момент вопроса. */
+  topicId: string;
+  topicTitle: string;
+  /** Когда вопрос приняли — от этого момента считается общий срок. */
+  acceptedAt?: string;
+  /** Когда каждый участник последний раз открыл переписку — для непрочитанных. */
+  readAt: Record<string, string>;
+  lastAt: string;
+  createdAt: string;
+}
+
+/** Копия закрытой переписки в кабинете одного человека (видна только ему). */
+export interface DmArchiveEntry {
+  id: string;
+  ownerId: string;
+  chatId: string;
+  withId: string;
+  /** Имя и ник собеседника на момент закрытия (если он удалит аккаунт — останутся). */
+  withName: string;
+  withUsername: string;
+  topicId: string | null;
+  topicTitle: string | null;
+  role: 'seeker' | 'helper';
+  reason: DmCloseReason;
+  startedAt: string;
+  closedAt: string;
+  messages: { id: string; mine: boolean; text: string; createdAt: string }[];
+}
+
+export interface DmMessage {
+  id: string;
+  chatId: string;
+  authorId: string;
+  text: string;
+  createdAt: string;
+}
+
+/** Жалоба на переписку: специалист видит только последние сообщения того, на кого пожаловались. */
+export interface DmReport {
+  id: string;
+  chatId: string;
+  reporterId: string;
+  reporterName: string;
+  reportedId: string;
+  reportedName: string;
+  reason: string;
+  messages: { text: string; createdAt: string }[];
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
 /**
  * Хранилище. Сейчас — файл (FileStorage), для сервера в интернете добавится PostgresStorage
  * с тем же интерфейсом; остальной код об этом не знает.
@@ -147,11 +233,19 @@ export interface Storage {
   setMeta(key: string, value: string): Promise<void>;
 
   findUser(name: string, role: UserRole): Promise<User | null>;
+  findByUsername(username: string): Promise<User | null>;
+  /** Поиск по нику (начало) и имени (часть) — для «Сообщений». */
+  searchUsers(query: string, limit: number): Promise<User[]>;
   getUser(id: string): Promise<User | null>;
   createUser(user: User): Promise<User>;
   updateUser(user: User): Promise<User>;
   /** Удалить пользователя со всеми данными: входы, доска, его обращения к специалисту. */
   deleteUser(id: string): Promise<void>;
+  /** Все пользователи (фоновые проверки: автоудаление неактивных). */
+  listUsers(): Promise<User[]>;
+  /** Фото-аватарка (ТЗ v4.18): байты и тип. */
+  getAvatar(userId: string): Promise<{ mime: string; data: string } | null>;
+  setAvatar(userId: string, photo: { mime: string; data: string } | null): Promise<void>;
 
   createSession(token: string, userId: string): Promise<void>;
   userIdBySession(token: string): Promise<string | null>;
@@ -181,6 +275,24 @@ export interface Storage {
   listAllReplies(): Promise<ForumReply[]>;
 
   listCommunities(): Promise<ForumCommunity[]>;
+
+  listChatsOf(userId: string): Promise<DmChat[]>;
+  getChat(id: string): Promise<DmChat | null>;
+  /** Открытая переписка этой пары по этой теме. */
+  chatAbout(a: string, b: string, topicId: string): Promise<DmChat | null>;
+  saveChat(chat: DmChat): Promise<DmChat>;
+  /** Стереть переписку вместе с сообщениями. */
+  deleteChat(id: string): Promise<void>;
+  /** Все открытые переписки (фоновое закрытие по срокам). */
+  listChats(): Promise<DmChat[]>;
+  listArchive(ownerId: string): Promise<DmArchiveEntry[]>;
+  getArchive(id: string): Promise<DmArchiveEntry | null>;
+  saveArchive(entry: DmArchiveEntry): Promise<DmArchiveEntry>;
+  deleteArchive(id: string): Promise<void>;
+  listDm(chatId: string): Promise<DmMessage[]>;
+  saveDm(message: DmMessage): Promise<DmMessage>;
+  listDmReports(): Promise<DmReport[]>;
+  saveDmReport(report: DmReport): Promise<DmReport>;
   saveCommunity(c: ForumCommunity): Promise<ForumCommunity>;
 }
 

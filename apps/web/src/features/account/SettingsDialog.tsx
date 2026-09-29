@@ -10,6 +10,12 @@ import { useBoard, useViewMode } from '@/features/board/store';
 import { useUser } from '@/lib/session';
 import { deleteAccount } from './account';
 import { ChangePassword } from './ChangePassword';
+import { DmSettings } from '@/features/dm/DmSettings';
+import { NickSetup } from '@/features/dm/NickSetup';
+import { AutoDelete } from './AutoDelete';
+import { AvatarSettings } from './AvatarSettings';
+import { RecoverySettings } from './RecoveryPhrase';
+import { ScalePicker } from './ScalePicker';
 
 type Confirm = null | 'delete';
 
@@ -67,7 +73,17 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               Цвет кнопок, акцентов и узора на доске. Сохраняется в кабинете — на всех ваших
               устройствах.
             </p>
+            <ScalePicker />
           </section>
+
+          {user && (
+            <section className={section} aria-labelledby="set-avatar">
+              <h3 id="set-avatar" className={h}>
+                Аватарка
+              </h3>
+              <AvatarSettings user={user} />
+            </section>
+          )}
 
           {!specialist && (
             <>
@@ -115,16 +131,35 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             </>
           )}
 
+          {user && (
+            <section className={section} aria-labelledby="set-dm">
+              <h3 id="set-dm" className={h}>
+                Бат-общение
+              </h3>
+              <DmSettings user={user} />
+            </section>
+          )}
+
           <section className={section} aria-labelledby="set-account">
             <h3 id="set-account" className={h}>
               Аккаунт
             </h3>
             <p className="text-xs text-fg-muted">
               {specialist
-                ? `Вы вошли как специалист «${user?.name}». Удаление сотрёт ваш вход и сообщения на БатФоруме; ответы в заявках останутся у сотрудников.`
-                : `Вы вошли как «${user?.name}». Удаление сотрёт ваши обращения, переписку, разделы и сообщения на БатФоруме и выполнит выход на всех устройствах.`}
+                ? `Вы вошли как специалист «${user?.name}». Удаление сотрёт ваш вход и сообщения на Бат-Форуме; ответы в заявках останутся у сотрудников.`
+                : `Вы вошли как «${user?.name}». Удаление сотрёт ваши обращения, переписку, разделы и сообщения на Бат-Форуме и выполнит выход на всех устройствах.`}
             </p>
+            {user?.username ? (
+              <p className="text-sm">
+                Ваш ник: <span className="font-medium text-heading">@{user.username}</span> — по
+                нему вы входите.
+              </p>
+            ) : (
+              <NickSetup />
+            )}
             <ChangePassword />
+            {user && <RecoverySettings user={user} />}
+            {user && <AutoDelete user={user} />}
             <div>
               <Button
                 size="sm"
@@ -145,7 +180,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         title="Удалить аккаунт навсегда?"
         description={
           specialist
-            ? `Специалист «${user?.name ?? ''}» и его сообщения на БатФоруме будут удалены с сервера. Восстановить нельзя.`
+            ? `Специалист «${user?.name ?? ''}» и его сообщения на Бат-Форуме будут удалены с сервера. Восстановить нельзя.`
             : `Пользователь «${user?.name ?? ''}», все обращения, переписка, разделы и обращения к специалисту будут удалены с сервера. Восстановить нельзя.`
         }
         footer={

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 /**
  * История переходов Канбата (ТЗ v4.9, п. 11) — как «Отменить / Вернуть» в Ворде, только для экранов:
- * каждый открытый экран (обращение, раздел, БатФорум, тема, очередь, заявка) — шаг.
+ * каждый открытый экран (обращение, раздел, Бат-Форум, тема, очередь, заявка) — шаг.
  * Живёт во вкладке (sessionStorage): переживает обновление страницы, у новой вкладки — своя.
  * Браузерная история тут ни при чём: Канбат занимает в ней одну запись (см. layout/AppHistory).
  */
@@ -98,9 +98,12 @@ export function describePath(path: string): string {
   if (p.startsWith('/s/')) return 'раздел';
   if (p === '/forum/review') return 'на проверке';
   if (p === '/org') return 'организация';
-  if (p.startsWith('/forum/t/')) return 'тема БатФорума';
-  if (p.startsWith('/forum/s/')) return 'сообщество БатФорума';
-  if (p.startsWith('/forum')) return 'БатФорум';
+  if (p.startsWith('/messages/archive')) return 'архив Бат-общения';
+  if (p.startsWith('/messages/')) return 'переписка';
+  if (p === '/messages') return 'Бат-общение';
+  if (p.startsWith('/forum/t/')) return 'тема Бат-Форума';
+  if (p.startsWith('/forum/s/')) return 'сообщество Бат-Форума';
+  if (p.startsWith('/forum')) return 'Бат-Форум';
   if (/^\/support\/.*t\//.test(p)) return 'заявка';
   if (p.startsWith('/support')) return 'пульт поддержки';
   return 'предыдущий экран';

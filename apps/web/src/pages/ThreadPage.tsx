@@ -12,14 +12,15 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Menu, type MenuItem } from '@/components/ui/Menu';
 import { CommunityIcon } from '@/features/forum/community';
 import { FORUM_NAME, handle } from '@/features/forum/sections';
 import { ForumLayout } from '@/features/forum/ForumLayout';
 import { NewThreadDialog } from '@/features/forum/NewThreadDialog';
-import { Author, ShareLink, ThreadFlags, VoteButton } from '@/features/forum/parts';
+import { AskButton, Author, ShareLink, ThreadFlags, VoteButton } from '@/features/forum/parts';
 import { useThreadActions } from '@/features/forum/ThreadActions';
 import { useForumSections } from '@/features/forum/sections';
 import { Markdown } from '@/features/task/Markdown';
@@ -31,20 +32,8 @@ import { cn } from '@/lib/cn';
 import { plural, timeAgo } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 
-/** Кружок с первой буквой имени — как аватар комментатора. */
-function Avatar({ name }: { name: string }) {
-  return (
-    <span
-      aria-hidden
-      className="grid size-8 shrink-0 place-items-center rounded-full bg-sunken text-sm font-semibold text-heading ring-1 ring-line"
-    >
-      {name.trim().charAt(0).toUpperCase() || '?'}
-    </span>
-  );
-}
-
 /**
- * Тема БатФорума: пост (голос слева, как на Reddit), поле ответа, ответы —
+ * Тема Бат-Форума: пост (голос слева, как на Reddit), поле ответа, ответы —
  * решение первым, дальше по «Помогло». Слева — о сообществе, справа — сообщества.
  */
 export function ThreadPage() {
@@ -59,6 +48,16 @@ export function ThreadPage() {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<ForumDraft | null>(null);
   const replyId = useId();
+  const [params, setParams] = useSearchParams();
+
+  // «Написать в теме» из Бат-общения (ТЗ v4.19): сразу к полю ответа
+  useEffect(() => {
+    if (!page || params.get('reply') !== '1') return;
+    const el = document.getElementById(replyId);
+    el?.scrollIntoView({ block: 'center' });
+    el?.focus({ preventScroll: true });
+    setParams({}, { replace: true });
+  }, [page, params, replyId, setParams]);
 
   useEffect(() => {
     setPage(null);
@@ -198,7 +197,12 @@ export function ThreadPage() {
                 </Link>
               )}
               <span aria-hidden>·</span>
-              <Author name={t.authorName} role={t.authorRole} />
+              <Author
+                name={t.authorName}
+                role={t.authorRole}
+                userId={t.authorId}
+                avatar={t.authorAvatar}
+              />
               <span aria-hidden>·</span>
               <time dateTime={t.createdAt}>{timeAgo(t.createdAt, now)}</time>
               {t.pinned && (
@@ -231,6 +235,13 @@ export function ThreadPage() {
               <span className="inline-flex h-8 items-center gap-1.5 px-1.5 text-xs font-medium text-heading">
                 <CheckCircle2 size={14} aria-hidden /> Есть решение
               </span>
+            )}
+            {t.authorAsk && t.authorId && (
+              <AskButton
+                threadId={t.id}
+                threadTitle={t.title}
+                user={{ id: t.authorId, name: t.authorName, avatar: t.authorAvatar }}
+              />
             )}
             <ShareLink id={t.id} />
           </div>
@@ -333,12 +344,12 @@ export function ThreadPage() {
             >
               {/* аватар и «нить» комментария, как на Reddit */}
               <div className="flex flex-col items-center gap-2">
-                <Avatar name={r.authorName} />
+                <Avatar name={r.authorName} userId={r.authorId} avatar={r.authorAvatar} size={32} />
                 <span aria-hidden className="w-px flex-1 bg-line" />
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
-                  <Author name={r.authorName} role={r.authorRole} />
+                  <Author name={r.authorName} role={r.authorRole} userId={r.authorId} />
                   <span aria-hidden>·</span>
                   <time dateTime={r.createdAt}>{timeAgo(r.createdAt, now)}</time>
                   {r.solution && (
@@ -355,6 +366,13 @@ export function ThreadPage() {
                     onVote={() => void act(() => forumApi.voteReply(r.id))}
                     label="Помогло"
                   />
+                  {r.authorAsk && r.authorId && (
+                    <AskButton
+                      threadId={t.id}
+                      threadTitle={t.title}
+                      user={{ id: r.authorId, name: r.authorName, avatar: r.authorAvatar }}
+                    />
+                  )}
                   {replyMenu(r).length > 0 && (
                     <Menu
                       label="Действия с ответом"

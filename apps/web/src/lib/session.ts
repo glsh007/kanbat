@@ -139,3 +139,110 @@ export async function refreshUser(force = false): Promise<void> {
   const data = (await res?.json().catch(() => null)) as { user?: User } | null;
   if (res?.ok && data?.user) replaceUser(data.user);
 }
+
+/**
+ * Регистрация (ТЗ v4.17): имя, ник, пароль, роль; специалисту — код. Сервер выдаёт фразу
+ * для восстановления доступа (v4.18) — её показывают один раз, и только потом `commit()` входит.
+ */
+export async function register(input: {
+  name: string;
+  username: string;
+  password: string;
+  role: UserRole;
+  code?: string;
+}): Promise<{ user: User; phrase: string | null; commit: () => void }> {
+  const res = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }).catch(() => null);
+  if (!res) throw new Error('Сервер не отвечает. Проверьте, что Канбат запущен.');
+  const data = (await res.json().catch(() => null)) as
+    (LoginResult & { message?: string; recoveryPhrase?: string }) | null;
+  if (!res.ok || !data?.token)
+    throw new Error(data?.message ?? `Ошибка регистрации (${res.status})`);
+  return {
+    user: data.user,
+    phrase: data.recoveryPhrase ?? null,
+    commit: () => useSession.getState().set({ token: data.token, user: data.user }),
+  };
+}
+
+/** POST с входом; ошибка — понятным текстом сервера. */
+async function authPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res) throw new Error('Сервер не отвечает. Проверьте, что Канбат запущен.');
+  if (res.status === 401 && sessionToken() && path !== '/api/auth/recovery') {
+    sessionExpired();
+    throw new Error('Войдите заново');
+  }
+  const data = (await res.json().catch(() => null)) as (T & { message?: string }) | null;
+  if (!res.ok || !data) throw new Error(data?.message ?? `Ошибка (${res.status})`);
+  return data;
+}
+
+/** «Забыли пароль?» (ТЗ v4.18): ник + фраза → новый пароль и новая фраза (вход — обычный). */
+export async function recoverAccess(
+  username: string,
+  phrase: string,
+  password: string,
+): Promise<{ username: string; role: UserRole; recoveryPhrase: string }> {
+  return authPost('/api/auth/recover', { username, phrase, password });
+}
+
+/** Новая фраза для восстановления (нужен текущий пароль); старая перестаёт работать. */
+export async function newRecoveryPhrase(password: string): Promise<string> {
+  const r = await authPost<{ phrase: string; user: User }>('/api/auth/recovery', { password });
+  replaceUser(r.user);
+  return r.phrase;
+}
+
+/** Аватарка (ТЗ v4.18): готовый рисунок, фото (data URL) или убрать. */
+export async function saveAvatar(
+  body: { preset: string } | { photo: string } | { remove: true },
+): Promise<void> {
+  const r = await authPost<{ user: User }>('/api/auth/avatar', body);
+  replaceUser(r.user);
+}
+
+/** Принимать ли личные вопросы в Бат-общении (ТЗ v4.19). */
+export async function saveDmOff(off: boolean): Promise<void> {
+  const r = await authPost<{ user: User }>('/api/auth/prefs', { dmOff: off });
+  replaceUser(r.user);
+}
+
+/** Удалить аккаунт после года без входа (ТЗ v4.18). */
+export async function saveAutoDelete(on: boolean): Promise<void> {
+  const r = await authPost<{ user: User }>('/api/auth/prefs', { autoDelete: on });
+  replaceUser(r.user);
+}
+
+/** Свободен ли ник: null — не удалось проверить (сервер недоступен). */
+export async function usernameStatus(
+  u: string,
+  signal?: AbortSignal,
+): Promise<{ available: boolean; reason: string | null } | null> {
+  try {
+    const res = await fetch(`/api/auth/username?u=${encodeURIComponent(u)}`, { signal });
+    return res.ok ? ((await res.json()) as { available: boolean; reason: string | null }) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ник для кабинета, созданного до регистрации (задаётся один раз). */
+export async function chooseUsername(username: string): Promise<void> {
+  const res = await fetch('/api/auth/username', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ username }),
+  }).catch(() => null);
+  if (!res) throw new Error('Сервер не отвечает');
+  const data = (await res.json().catch(() => null)) as { user?: User; message?: string } | null;
+  if (!res.ok || !data?.user) throw new Error(data?.message ?? `Ошибка (${res.status})`);
+  replaceUser(data.user);
+}

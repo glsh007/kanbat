@@ -2,13 +2,15 @@ import { ESCALATION_LABELS, messagesForSpecialist, type Message } from '@app/sha
 import { ArrowLeft, Check, Flag, Hand, Lock, Send, X } from 'lucide-react';
 import { NavArrows } from '@/layout/NavArrows';
 import { motion } from 'motion/react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
 import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
+import { usePanelWidth } from '@/lib/panelWidth';
 import { useNow } from '@/lib/useNow';
 import { CopyHandoff, HandoffSummary } from './HandoffSummary';
 import { agoLabel } from './data';
@@ -34,6 +36,9 @@ export function SpecialistPanel({
   const task = useTickets((s) => s.tickets.find((t) => t.id === taskId));
   const loaded = useTickets((s) => s.loaded);
   const messages = task?.messages as Message[] | undefined;
+  // доска: заявка открывается поверх столбцов, ширина — за левый край (ТЗ v4.18–v4.20)
+  const panelW = usePanelWidth('ticket-panel', 560, 420, 1400);
+  const panelStyle = { '--panel-w': `${panelW.width}px` } as CSSProperties;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,9 +76,12 @@ export function SpecialistPanel({
     if (!loaded) return null;
     return (
       <aside
+        style={panelStyle}
         className={cn(
-          'fixed inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-canvas p-6 text-center lg:static',
-          layout === 'side' ? 'lg:w-[45%] lg:border-l lg:border-line' : 'lg:min-w-0 lg:flex-1',
+          'fixed inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-canvas p-6 text-center',
+          layout === 'side'
+            ? 'lg:absolute lg:inset-y-0 lg:right-0 lg:left-auto lg:z-20 lg:w-[min(var(--panel-w),calc(100%-3rem))] lg:border-l lg:border-line lg:shadow-raised'
+            : 'lg:static lg:min-w-0 lg:flex-1',
         )}
       >
         <p className="text-fg-muted">Заявка не найдена — возможно, сотрудник удалил аккаунт.</p>
@@ -117,13 +125,16 @@ export function SpecialistPanel({
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.25, ease: [0.2, 0.7, 0.2, 1] }}
+      style={panelStyle}
       className={cn(
-        'fixed inset-0 z-30 flex flex-col bg-canvas lg:static lg:z-auto',
+        'fixed inset-0 z-30 flex flex-col bg-canvas',
         layout === 'side'
-          ? 'lg:w-[45%] lg:min-w-[420px] lg:shrink-0 lg:border-l lg:border-line'
-          : 'lg:min-w-0 lg:flex-1',
+          ? // доска: поверх столбцов — доска не сужается и не сдвигается
+            'lg:absolute lg:inset-y-0 lg:right-0 lg:left-auto lg:z-20 lg:w-[min(var(--panel-w),calc(100%-3rem))] lg:border-l lg:border-line lg:shadow-raised'
+          : 'lg:static lg:z-auto lg:min-w-0 lg:flex-1',
       )}
     >
+      {layout === 'side' && <ResizeHandle panel={panelW} edge="left" label="Ширина окна заявки" />}
       <header className="flex flex-col gap-2 border-b border-line px-2 pt-2 pb-3 sm:px-4">
         <div className="flex items-start gap-1">
           <IconButton

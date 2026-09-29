@@ -27,7 +27,7 @@ export const COMMUNITY_ICONS = [
 ] as const;
 export type CommunityIconKey = (typeof COMMUNITY_ICONS)[number];
 
-/** Сообщество БатФорума (раздел) со статистикой. */
+/** Сообщество Бат-Форума (раздел) со статистикой. */
 export interface ForumSection {
   id: string;
   /** Короткий адрес: «б/почта». */
@@ -56,6 +56,12 @@ export interface CommunityProposal {
   description: string;
   icon: CommunityIconKey;
   status: CommunityStatus;
+  /** Для профиля и «Написать» (ТЗ v4.17). */
+  authorId?: string;
+  /** Метка аватарки автора (ТЗ v4.18). */
+  authorAvatar?: string;
+  /** Автора можно «Спросить лично» (ТЗ v4.19): не я и принимает личные вопросы. */
+  authorAsk?: boolean;
   authorName: string;
   mine: boolean;
   createdAt: string;
@@ -105,6 +111,12 @@ export interface ForumThreadView {
   title: string;
   /** В списке — начало текста, в теме — целиком (Markdown). */
   body: string;
+  /** Для профиля и «Написать» (ТЗ v4.17). */
+  authorId?: string;
+  /** Метка аватарки автора (ТЗ v4.18). */
+  authorAvatar?: string;
+  /** Автора можно «Спросить лично» (ТЗ v4.19): не я и принимает личные вопросы. */
+  authorAsk?: boolean;
   authorName: string;
   authorRole: UserRole;
   mine: boolean;
@@ -131,6 +143,12 @@ export interface ForumThreadView {
 export interface ForumReplyView {
   id: string;
   body: string;
+  /** Для профиля и «Написать» (ТЗ v4.17). */
+  authorId?: string;
+  /** Метка аватарки автора (ТЗ v4.18). */
+  authorAvatar?: string;
+  /** Автора можно «Спросить лично» (ТЗ v4.19): не я и принимает личные вопросы. */
+  authorAsk?: boolean;
   authorName: string;
   authorRole: UserRole;
   mine: boolean;

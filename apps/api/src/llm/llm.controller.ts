@@ -73,7 +73,7 @@ export class LlmController {
     @Inject(STORAGE) private readonly storage: Storage,
   ) {}
 
-  /** Активные сообщества БатФорума (стартовые создаёт ForumService при запуске). */
+  /** Активные сообщества Бат-Форума (стартовые создаёт ForumService при запуске). */
   private async communities() {
     return (await this.storage.listCommunities()).filter((c) => c.status === 'active');
   }
@@ -179,20 +179,6 @@ export class LlmController {
       .slice(0, 200);
     try {
       return await this.llm.sort(sections, items, body?.model);
-    } catch (e) {
-      throw new BadRequestException(errorMessage(e));
-    }
-  }
-
-  /** Черновик темы форума из решённого обращения. */
-  @Post('forum-draft')
-  async forumDraft(@Body() body: { messages?: unknown } & WithModel) {
-    try {
-      return await this.llm.forumDraft(
-        messages(body?.messages),
-        (await this.communities()).map((s) => ({ id: s.id, name: s.name })),
-        body?.model,
-      );
     } catch (e) {
       throw new BadRequestException(errorMessage(e));
     }

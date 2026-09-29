@@ -1,10 +1,11 @@
 import { GENERAL_SECTION_ID, isManualSection, URGENCY_ORDER, type Task } from '@app/shared';
 import { ChevronDown, Headset, ListPlus, MessageSquareText, Plus, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import { Logo } from '@/brand/Logo';
 import { Button } from '@/components/ui/Button';
+import { ListEdge } from '@/components/ui/ResizeHandle';
 import { SectionDot } from '@/components/ui/SectionDot';
 import { StageTrack } from '@/components/ui/StageTrack';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
@@ -13,6 +14,7 @@ import { inSection, useBoard, userSections } from '@/features/board/store';
 import { useAddToSection } from '@/features/sections/addStore';
 import { TaskPanel } from '@/features/task/TaskPanel';
 import { cn } from '@/lib/cn';
+import { usePanelWidth } from '@/lib/panelWidth';
 import { useUser } from '@/lib/session';
 import { AiUnavailableBanner } from '@/features/agent/AiUnavailableBanner';
 import { RequestComposer } from './RequestComposer';
@@ -217,6 +219,9 @@ export function RequestsView({ sectionId, taskId }: { sectionId: string; taskId?
   }, [tasks, sectionId]);
 
   const own = userSections(sections);
+  // ширину списка можно менять за край (ТЗ v4.18)
+  const listWidth = usePanelWidth('requests', 360, 280, 640);
+
   const create = (text: string) => {
     const id = useBoard.getState().createTask(text, sectionId);
     void agent.start(id);
@@ -226,8 +231,9 @@ export function RequestsView({ sectionId, taskId }: { sectionId: string; taskId?
   return (
     <div className="flex h-full">
       <div
+        style={{ '--panel-w': `${listWidth.width}px` } as CSSProperties}
         className={cn(
-          'scroll-paper flex w-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 lg:w-[360px] lg:shrink-0 lg:border-r lg:border-line lg:p-3 [&>*]:shrink-0',
+          'scroll-paper flex w-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 lg:w-[var(--panel-w)] lg:shrink-0 lg:border-r lg:border-line lg:p-3 [&>*]:shrink-0',
           taskId && 'hidden lg:flex',
         )}
       >
@@ -296,6 +302,7 @@ export function RequestsView({ sectionId, taskId }: { sectionId: string; taskId?
         )}
         {total === 0 && <EmptyList sectionId={sectionId} />}
       </div>
+      <ListEdge panel={listWidth} label="Ширина списка обращений" />
 
       {taskId ? (
         <TaskPanel

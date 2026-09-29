@@ -79,7 +79,7 @@ export const useForumFlash = create<{
 });
 
 /** Название форума. */
-export const FORUM_NAME = 'БатФорум';
+export const FORUM_NAME = 'Бат-Форум';
 
 /** Адрес сообщества в стиле Reddit: «б/почта». */
 export const handle = (s: Pick<ForumSection, 'slug'>) => `б/${s.slug}`;

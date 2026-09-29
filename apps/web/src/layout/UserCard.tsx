@@ -1,5 +1,6 @@
 import { CloudOff, LogOut, Settings } from 'lucide-react';
 import { useState } from 'react';
+import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { IconButton } from '@/components/ui/IconButton';
@@ -15,15 +16,9 @@ export function UserCard() {
   const [confirm, setConfirm] = useState(false);
   const [settings, setSettings] = useState(false);
   if (!user) return null;
-  const initial = user.name.trim().charAt(0).toUpperCase() || '?';
   return (
     <div className="flex items-center gap-3 px-3">
-      <span
-        aria-hidden
-        className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft font-semibold text-on-accent-soft"
-      >
-        {initial}
-      </span>
+      <Avatar name={user.name} userId={user.id} avatar={user.avatar} size={36} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-heading">{user.name}</p>
         <p className="text-xs text-fg-muted">
@@ -62,7 +57,7 @@ export function UserCard() {
         description={
           user.role === 'specialist'
             ? 'Заявки остаются на сервере — войдите снова с кодом специалиста.'
-            : 'Ваши обращения сохранены на сервере — войдите с тем же именем и паролем — они откроются снова.'
+            : 'Ваши обращения сохранены на сервере — войдите с тем же ником и паролем — они откроются снова.'
         }
         footer={
           <>
