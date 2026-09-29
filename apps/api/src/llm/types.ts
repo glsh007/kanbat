@@ -111,6 +111,26 @@ export interface StepsResult {
   escalate_reason: string;
 }
 
+/** Шаг плана, как его видит модель при ответе человека (ТЗ v4.21). */
+export interface PlanStepRef {
+  title: string;
+  instruction?: string;
+  check?: string;
+  /** ok — сделано, fail — не подошло, иначе — ещё не пройден */
+  result?: string;
+}
+
+export const STEP_OUTCOMES = ['done', 'ask', 'failed', 'other', 'solved', 'specialist'] as const;
+export type StepOutcome = (typeof STEP_OUTCOMES)[number];
+
+export interface StepReplyResult {
+  outcome: StepOutcome;
+  /** Живая реакция, 1–3 предложения. */
+  reply: string;
+  /** Новое действие вместо шага — только для failed / other. */
+  step: { title: string; instruction: string; check: string } | null;
+}
+
 export interface HandoffResult {
   hypothesis: string;
   actions: string[];

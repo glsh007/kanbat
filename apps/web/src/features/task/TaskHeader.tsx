@@ -1,4 +1,6 @@
 import {
+  canMoveManually,
+  moveLabel,
   COLUMN_LABELS,
   COLUMNS,
   GENERAL_SECTION_ID,
@@ -88,11 +90,12 @@ export function TaskHeader({
   const boardItems: MenuItem[] = showKind
     ? [
         { kind: 'label', id: 'move', label: 'Переместить в столбец' },
+        // вперёд двигает помощник; вручную — только назад или в «Готово» (ТЗ v4.23)
         ...COLUMNS.map((c): MenuItem => ({
           id: `m-${c}`,
-          label: COLUMN_LABELS[c],
+          label: moveLabel(task.column, c),
           checked: task.column === c,
-          disabled: task.column === c,
+          disabled: !canMoveManually(task.column, c) || task.column === c,
           onSelect: () => onMove(c),
         })),
       ]
@@ -194,7 +197,11 @@ export function TaskHeader({
           {showKind && <span className="sr-only">Тип {kind}</span>}
         </span>
         <StageTrack column={task.column} />
-        <span className="text-sm text-fg-muted">{COLUMN_LABELS[task.column]}</span>
+        <span className="text-sm text-fg-muted">
+          {task.column === 'done' && task.selfSolved
+            ? 'Решено самостоятельно'
+            : COLUMN_LABELS[task.column]}
+        </span>
       </div>
       <SectionChips task={task} sections={sections} view={GENERAL_SECTION_ID} className="pl-1" />
     </header>

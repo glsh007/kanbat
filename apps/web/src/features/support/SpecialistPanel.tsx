@@ -1,5 +1,10 @@
-import { ESCALATION_LABELS, messagesForSpecialist, type Message } from '@app/shared';
-import { ArrowLeft, Check, Flag, Hand, Lock, Send, X } from 'lucide-react';
+import {
+  ESCALATION_LABELS,
+  messagesForSpecialist,
+  type Message,
+  type SpecialistRef,
+} from '@app/shared';
+import { ArrowLeft, Check, Flag, Hand, Lock, Send, Undo2, X, XCircle } from 'lucide-react';
 import { NavArrows } from '@/layout/NavArrows';
 import { motion } from 'motion/react';
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
@@ -13,15 +18,20 @@ import { cn } from '@/lib/cn';
 import { usePanelWidth } from '@/lib/panelWidth';
 import { useNow } from '@/lib/useNow';
 import { CopyHandoff, HandoffSummary } from './HandoffSummary';
-import { agoLabel } from './data';
-import { specialist, useTickets } from './tickets';
+import { serverApi } from '@/lib/api';
+import { useUser } from '@/lib/session';
+import { CloseTicketDialog } from './CloseTicketDialog';
+import { agoLabel, closedLabel, holderLabel, leftLabel, returnedLabel } from './data';
+import { specialist, useSupportTimers, useTickets } from './tickets';
 
 const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
 /**
  * Заявка на пульте специалиста (ТЗ v4.4, п. 14): сводка из 6 пунктов от ИИ, переписка
- * с сотрудником после передачи, ответ, «Взять в работу», «Решено».
- * Разговор сотрудника с ИИ специалисту не показывается — только сводка.
+ * с пользователем после передачи, ответ, «Принять в работу», «Вернуть в общую очередь»,
+ * «Закрыть без решения»; администратор — «Передать» (ТЗ v4.22). Решённой заявку делает только
+ * пользователь («Закрыть вопрос») или срок — «Отметить решённым» у специалиста нет.
+ * Разговор пользователя с ИИ специалисту не показывается — только сводка.
  * `side` — панель справа от доски, `main` — правая часть режима «Чат».
  */
 export function SpecialistPanel({
@@ -46,15 +56,36 @@ export function SpecialistPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const seen = useRef<number | null>(null);
   const now = useNow();
+  const me = useUser();
+  const admin = me?.admin === true;
+  const timers = useSupportTimers();
+  const [closing, setClosing] = useState(false);
+  const [people, setPeople] = useState<SpecialistRef[]>([]);
+  const assignId = useId();
+
+  // администратору — список специалистов для «Передать»
+  useEffect(() => {
+    if (!admin) return;
+    let alive = true;
+    serverApi
+      .specialists()
+      .then((list) => alive && setPeople(list))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [admin]);
 
   /** Действие специалиста на сервере; ошибку показываем под кнопками. */
-  const act = async (run: () => Promise<void>) => {
+  const act = async (run: () => Promise<void>): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
       await run();
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -84,7 +115,7 @@ export function SpecialistPanel({
             : 'lg:static lg:min-w-0 lg:flex-1',
         )}
       >
-        <p className="text-fg-muted">Заявка не найдена — возможно, сотрудник удалил аккаунт.</p>
+        <p className="text-fg-muted">Заявка не найдена — возможно, пользователь удалил аккаунт.</p>
         <Button variant="secondary" onClick={onClose}>
           К заявкам
         </Button>
@@ -92,7 +123,11 @@ export function SpecialistPanel({
     );
   }
   const e = task.escalation;
-  // только сообщения сотрудника после передачи (старые заявки могли хранить больше)
+  const mine = !!task.takenBy && task.takenBy.id === me?.id;
+  // заявку ведёт другой — отвечать и закрывать может он или администратор (ТЗ v4.22)
+  const canAct = !task.takenBy || mine || admin;
+  const back = returnedLabel(task, timers.returnHours);
+  // только сообщения пользователя после передачи (старые заявки могли хранить больше)
   const after = messagesForSpecialist(messages ?? [], e);
 
   // сообщения пользователя после передачи и ответы специалистов — одной лентой
@@ -159,10 +194,10 @@ export function SpecialistPanel({
             <UrgencyBadge urgency={e.handoff.urgency} showAll />
           </span>
           {task.urgent && <UrgentMark reason={task.urgent.reason} forSpecialist />}
-          <span>{ESCALATION_LABELS[e.status]}</span>
+          <span>{e.status === 'resolved' ? 'Закрыта' : ESCALATION_LABELS[e.status]}</span>
           <span>передано {agoLabel(e.createdAt, now)}</span>
           <span>· от {task.ownerName}</span>
-          {task.takenBy && <span>· взял: {task.takenBy.name}</span>}
+          {task.takenBy && <span>· {holderLabel(task, me?.id ?? null)}</span>}
           <span>· {e.reason}</span>
         </div>
       </header>
@@ -173,10 +208,10 @@ export function SpecialistPanel({
             <p className="flex items-start gap-2 rounded-card border border-line-strong bg-surface px-4 py-3 text-sm">
               <Flag size={16} aria-hidden className="mt-0.5 shrink-0" />
               <span>
-                <span className="font-medium text-heading">Сотрудник просит срочно:</span> «
+                <span className="font-medium text-heading">Пользователь просит срочно:</span> «
                 {task.urgent.reason}» · {agoLabel(task.urgent.at, now)}
                 <span className="block text-fg-muted">
-                  Это просьба сотрудника — очередь и сроки она не меняет.
+                  Это просьба пользователя — очередь и сроки она не меняет.
                 </span>
               </span>
             </p>
@@ -200,20 +235,20 @@ export function SpecialistPanel({
             <HandoffSummary handoff={e.handoff} />
             <p className="mt-3 flex items-start gap-2 border-t border-line pt-3 text-xs text-fg-muted">
               <Lock size={14} aria-hidden className="mt-px shrink-0" />
-              Разговор сотрудника с ИИ остаётся у него — здесь только сводка. Нужны детали —
+              Разговор пользователя с ИИ остаётся у него — здесь только сводка. Нужны детали —
               спросите в ответе.
             </p>
           </section>
 
           <section className="flex flex-col gap-2" aria-labelledby="thread-h">
             <h3 id="thread-h" className="text-sm font-semibold text-heading">
-              Переписка с сотрудником
+              Переписка с пользователем
             </h3>
             {thread.length === 0 ? (
               <p className="text-sm text-fg-muted">
                 {e.status === 'resolved'
                   ? 'Сообщений после передачи не было.'
-                  : 'Пока тихо. Напишите сотруднику — ответ придёт в его чат.'}
+                  : 'Пока тихо. Напишите пользователю — ответ придёт в его чат.'}
               </p>
             ) : (
               <ol className="flex flex-col gap-2">
@@ -228,8 +263,13 @@ export function SpecialistPanel({
                     )}
                   >
                     <span className={cn('mb-0.5 block text-xs', m.mine && 'text-fg-muted')}>
-                      {m.mine ? `Вы (${m.author})` : task.ownerName} ·{' '}
-                      {timeFmt.format(new Date(m.at))}
+                      {m.mine
+                        ? // ответы разных специалистов: «Вы» — только свои (ТЗ v4.22)
+                          m.author === me?.name
+                          ? `Вы (${m.author})`
+                          : `${m.author}, специалист`
+                        : task.ownerName}{' '}
+                      · {timeFmt.format(new Date(m.at))}
                     </span>
                     {m.text}
                   </li>
@@ -244,70 +284,135 @@ export function SpecialistPanel({
         <div className="mx-auto flex max-w-3xl flex-col gap-2">
           {e.status === 'resolved' ? (
             <p className="flex items-center gap-2 text-sm text-fg-muted">
-              <Check size={16} aria-hidden /> Заявка закрыта.
+              <Check size={16} aria-hidden /> Заявка закрыта: {closedLabel(task)}.
             </p>
           ) : (
             <>
+              {back && (
+                <p className="flex items-center gap-2 text-sm font-medium text-heading">
+                  <Undo2 size={16} aria-hidden /> {back}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-2">
-                {e.status === 'new' && (
+                {!task.takenBy && (
                   <Button
                     size="sm"
-                    variant="secondary"
                     icon={<Hand size={16} />}
                     disabled={busy}
                     onClick={() => void act(() => specialist.take(task.id))}
                   >
-                    Взять в работу
+                    Принять в работу
                   </Button>
                 )}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={<Check size={16} />}
-                  disabled={busy}
-                  onClick={() => void act(() => specialist.resolve(task.id))}
-                >
-                  Отметить решённым
-                </Button>
+                {task.takenBy && (mine || admin) && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Undo2 size={16} />}
+                    disabled={busy}
+                    onClick={() => void act(() => specialist.release(task.id))}
+                  >
+                    Вернуть в общую очередь
+                  </Button>
+                )}
+                {canAct && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<XCircle size={16} />}
+                    disabled={busy}
+                    onClick={() => {
+                      setError(null);
+                      setClosing(true);
+                    }}
+                  >
+                    Закрыть без решения
+                  </Button>
+                )}
+                {admin && people.length > 0 && (
+                  <span className="flex items-center gap-2">
+                    <label htmlFor={assignId} className="text-sm text-fg-muted">
+                      Ведёт
+                    </label>
+                    <select
+                      id={assignId}
+                      value={task.takenBy?.id ?? ''}
+                      disabled={busy}
+                      onChange={(ev) =>
+                        void act(() => specialist.assign(task.id, ev.target.value || null))
+                      }
+                      className={cn(fieldClass.replace('w-full', ''), 'h-9 w-auto text-sm')}
+                    >
+                      <option value="">— общая очередь —</option>
+                      {people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.id === me?.id ? `${p.name} (вы)` : p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                )}
               </div>
-              <form
-                className="flex items-end gap-2"
-                onSubmit={(ev) => {
-                  ev.preventDefault();
-                  send();
-                }}
-              >
-                <label htmlFor={fieldId} className="sr-only">
-                  Ответ сотруднику
-                </label>
-                <textarea
-                  id={fieldId}
-                  rows={2}
-                  value={text}
-                  onChange={(ev) => setText(ev.target.value)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) send();
-                  }}
-                  placeholder="Ответ сотруднику: что сделали или что ему сделать…"
-                  className={cn(fieldClass, 'min-h-11 flex-1 resize-none py-2 text-sm')}
-                />
-                <Button type="submit" icon={<Send size={16} />} disabled={!text.trim() || busy}>
-                  Ответить
-                </Button>
-              </form>
-              {error && (
-                <p role="alert" className="text-sm font-medium text-heading">
-                  {error}
+              {!canAct ? (
+                <p className="rounded-card border border-line bg-sunken px-3 py-2 text-sm">
+                  Заявку ведёт {task.takenBy?.name} — отвечает он(а). Передать заявку другому может
+                  администратор.
                 </p>
+              ) : (
+                <>
+                  <form
+                    className="flex items-end gap-2"
+                    onSubmit={(ev) => {
+                      ev.preventDefault();
+                      send();
+                    }}
+                  >
+                    <label htmlFor={fieldId} className="sr-only">
+                      Ответ пользователю
+                    </label>
+                    <textarea
+                      id={fieldId}
+                      rows={2}
+                      value={text}
+                      onChange={(ev) => setText(ev.target.value)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) send();
+                      }}
+                      placeholder="Ответ пользователю: что сделали или что ему сделать…"
+                      className={cn(fieldClass, 'min-h-11 flex-1 resize-none py-2 text-sm')}
+                    />
+                    <Button type="submit" icon={<Send size={16} />} disabled={!text.trim() || busy}>
+                      Ответить
+                    </Button>
+                  </form>
+                  {error && (
+                    <p role="alert" className="text-sm font-medium text-heading">
+                      {error}
+                    </p>
+                  )}
+                  <p className="text-xs text-fg-muted">
+                    {e.status === 'answered' && e.closeAt
+                      ? `Ждём пользователя: если он не ответит, заявка закроется сама ${leftLabel(e.closeAt, now)}. `
+                      : `Ответ придёт в чат пользователя. Если он не ответит ${timers.closeHours} ч — заявка закроется сама. `}
+                    Ctrl+Enter — отправить.
+                  </p>
+                </>
               )}
-              <p className="text-xs text-fg-muted">
-                Ответ придёт в чат сотрудника, заявка перейдёт в «Ждут пользователя». Ctrl+Enter —
-                отправить.
-              </p>
             </>
           )}
         </div>
       </div>
+      <CloseTicketDialog
+        open={closing}
+        busy={busy}
+        error={closing ? error : null}
+        onClose={() => setClosing(false)}
+        onConfirm={(reason, note) =>
+          void act(() => specialist.close(task.id, reason, note)).then(
+            (done) => done && setClosing(false),
+          )
+        }
+      />
     </motion.aside>
   );
 }

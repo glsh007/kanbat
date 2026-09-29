@@ -16,7 +16,7 @@ import { AppShell } from '@/layout/AppShell';
 import { clip } from '@/features/nav/history';
 import { useNavTitle } from '@/features/nav/useNavTitle';
 
-/** Личный кабинет сотрудника: «Общее» или раздел — списком с чатом или канбан-доской. */
+/** Личный кабинет пользователя: «Общее» или раздел — списком с чатом или канбан-доской. */
 export function BoardPage() {
   const { sectionId, taskId } = useParams();
   const section = useSection(sectionId);

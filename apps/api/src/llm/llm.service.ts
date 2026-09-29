@@ -6,6 +6,9 @@ import {
   mockPlan,
   mockQuestions,
   mockSteps,
+  mockStepReply,
+  isBareAck,
+  withoutQuestions,
   mockStream,
   mockSupportQuestions,
   mockTriage,
@@ -43,7 +46,11 @@ import type {
   StreamMode,
   Triage,
   AnswerOutcome,
+  PlanStepRef,
+  StepOutcome,
+  StepReplyResult,
 } from './types';
+import { STEP_OUTCOMES } from './types';
 
 /** Модели по убыванию предпочтения, если пользователь не выбрал свою. */
 const PREFERRED = [
@@ -443,6 +450,69 @@ export class LlmService {
     };
   }
 
+  /**
+   * Ответ человека на шаг своими словами (ТЗ v4.21): живая реакция + итог для кода.
+   * Без модели — разбор по словам (mockStepReply).
+   */
+  async stepReply(
+    history: ChatMessage[],
+    plan: PlanStepRef[],
+    index: number,
+    urgent: boolean,
+    requested?: string | null,
+  ): Promise<StepReplyResult> {
+    const last = [...history].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const model = await this.resolve(requested);
+    if (!model) return this.withoutAi(() => mockStepReply(last, plan, index));
+    // ошибка модели уходит клиенту: он разберёт ответ по словам сам и не выдумает шагов
+    const r = await this.guard('step-reply', () =>
+      this.client.json<Partial<StepReplyResult>>(
+        model,
+        toOllama(P.STEP_REPLY(this.base(), plan, index, urgent), this.trim(history)),
+        P.STEP_REPLY_SCHEMA,
+      ),
+    );
+    let outcome = STEP_OUTCOMES.includes(r.outcome as StepOutcome)
+      ? (r.outcome as StepOutcome)
+      : mockStepReply(last, plan, index).outcome;
+    let reply = typeof r.reply === 'string' ? r.reply.trim().slice(0, 600) : '';
+    const raw = r.step && typeof r.step === 'object' ? r.step : null;
+    const step =
+      raw && typeof raw.title === 'string' && raw.title.trim()
+        ? (() => {
+            const n = normalizeStep(raw as SolutionStep);
+            return { title: n.title.slice(0, 80), instruction: n.instruction, check: n.check };
+          })()
+        : null;
+    // модель переспрашивает, хотя человек уже ответил («не приходят», «нет»), — идём дальше по плану:
+    // переспрос одного и того же вопроса по кругу злит больше всего (ТЗ v4.23)
+    if (outcome === 'ask' && !isBareAck(last)) {
+      outcome = 'done';
+      reply = withoutQuestions(reply);
+    }
+    const needsStep = outcome === 'failed' || outcome === 'other';
+    // «не помогло» без нового действия: есть следующий шаг плана — идём к нему, нет — честно про специалиста
+    if (needsStep && !step && index + 1 < plan.length)
+      return { outcome, reply: withoutQuestions(reply), step: null };
+    if (needsStep && !step)
+      return {
+        outcome: 'specialist',
+        reply: `${reply ? `${reply} ` : ''}Больше идей, что можно сделать самому, у меня нет. Передать обращение специалисту?`,
+        step: null,
+      };
+    return {
+      outcome,
+      reply:
+        reply ||
+        (outcome === 'ask'
+          ? 'Что получилось в итоге?'
+          : outcome === 'solved'
+            ? 'Отлично, рад, что всё заработало!'
+            : ''),
+      step: needsStep ? step : null,
+    };
+  }
+
   async handoff(history: ChatMessage[], requested?: string | null): Promise<HandoffResult> {
     const model = await this.resolve(requested);
     if (!model) return this.withoutAi(() => mockHandoff(history));
@@ -711,22 +781,19 @@ export function askForDetails(t: Triage, text: string): Triage {
   };
 }
 
-/** Шаг решения: подписи ответов — по смыслу шага, иначе нейтральные «Получилось / Не получилось». */
+/** Шаг решения (ТЗ v4.21): ответ человек пишет сам, кнопок «Да / Нет» больше нет. */
 function normalizeStep(x: Partial<SolutionStep> & { title: string }): SolutionStep {
   const clip = (v: unknown, n: number) =>
     String(v ?? '')
       .trim()
       .replace(/\s+/g, ' ')
       .slice(0, n);
-  const yes = clip(x.yes, 40);
-  const no = clip(x.no, 40);
-  const pair = yes && no && yes.toLowerCase() !== no.toLowerCase();
   return {
     title: x.title.trim(),
     instruction: clip(x.instruction, 400),
     check: clip(x.check, 120),
-    yes: pair ? yes : 'Получилось',
-    no: pair ? no : 'Не получилось',
+    yes: '',
+    no: '',
   };
 }
 

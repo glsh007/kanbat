@@ -25,7 +25,7 @@ const LAST_LOGIN = 'kc-last-name';
 const PASSWORD_MIN = 6;
 
 const ROLES: { id: UserRole; label: string; hint: string; icon: typeof UserRound }[] = [
-  { id: 'employee', label: 'Сотрудник', hint: 'Пишу обращения', icon: UserRound },
+  { id: 'employee', label: 'Пользователь', hint: 'Пишу обращения', icon: UserRound },
   { id: 'specialist', label: 'Специалист', hint: 'Отвечаю на обращения', icon: Headset },
 ];
 

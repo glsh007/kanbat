@@ -1,4 +1,4 @@
-import { isBackwardMove, isProblemTask, type ColumnId } from '@app/shared';
+import { canMoveManually, isBackwardMove, isProblemTask, type ColumnId } from '@app/shared';
 import { Check, CheckCheck, Headset, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
@@ -24,6 +24,17 @@ import { URGENT_NOTE, UrgentMark } from '@/components/ui/UrgentMark';
 import { Composer, type ComposerHandle } from './Composer';
 import { MessageList } from './MessageList';
 import { TaskHeader } from './TaskHeader';
+
+/** Панель ответа внизу: вопрос уточнения, встречный вопрос, шаг или предложение специалиста. */
+type DockState = {
+  counter: string | null;
+  question: string;
+  options: string[];
+  skip: boolean;
+  skipAll: boolean;
+  note?: string;
+  placeholder?: string;
+};
 
 type Props = {
   taskId: string;
@@ -125,10 +136,9 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
 
   const move = (to: ColumnId) => {
     if (to === task.column) return;
-    if (to === 'done') return void agent.accept(task.id);
-    if (task.column === 'draft') {
-      if (to !== 'draft') return void agent.start(task.id);
-    }
+    // вперёд двигает помощник; вручную — назад или в «Готово» («решено самостоятельно», ТЗ v4.23)
+    if (!canMoveManually(task.column, to)) return;
+    if (to === 'done') return void agent.selfSolve(task.id);
     if (isBackwardMove(task.column, to) && to !== 'draft') {
       useBoard.getState().placeTask(task.id, to, 0);
       composer.current?.focus();
@@ -143,12 +153,15 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
   const qs = waiting && task.checkpoint === 'questions' ? (task.questions ?? []) : [];
   const qIndex = qs.length - task.pendingQuestions;
   const currentQ = qs[qIndex];
-  const dock = currentQ
+  const step = waiting && task.checkpoint === 'step' ? task.plan?.[task.stepIndex] : undefined;
+  const total = task.plan?.length ?? 0;
+  const dock: DockState | null = currentQ
     ? {
         counter: qs.length > 1 ? `Вопрос ${qIndex + 1} из ${qs.length}` : null,
         question: currentQ.text,
         options: currentQ.options,
         skip: true,
+        skipAll: true,
       }
     : waiting && task.checkpoint === 'ask'
       ? {
@@ -156,10 +169,35 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
           question: task.askText || 'Ответьте на вопрос помощника выше',
           options: task.replyOptions ?? [],
           skip: false,
+          // ждём результат действия (без вариантов) — «ответить без уточнений» не к месту
+          skipAll: !!task.replyOptions?.length,
+          placeholder: task.replyOptions?.length ? undefined : 'Ответ своими словами…',
         }
-      : null;
+      : step
+        ? {
+            // ответ на шаг — только своими словами, без быстрых ответов (ТЗ v4.23)
+            counter:
+              total > 1 ? `Шаг ${task.stepIndex + 1} из ${total} · ${step.title}` : step.title,
+            question: step.check || 'Как прошёл шаг?',
+            options: [],
+            skip: false,
+            skipAll: false,
+            placeholder: 'Ответ своими словами…',
+          }
+        : waiting && task.checkpoint === 'offer'
+          ? {
+              // специалист — только с согласия (ТЗ v4.21)
+              counter: null,
+              question: 'Передать обращение специалисту?',
+              note: 'Он получит короткую сводку — пересказывать ничего не придётся.',
+              options: ['Передать специалисту', task.offer?.continueLabel || 'Продолжить с ИИ'],
+              skip: false,
+              skipAll: false,
+              placeholder: 'Или напишите, что думаете…',
+            }
+          : null;
   const withSupport = task.status === 'with_support';
-  // Обращение-проблема: проверка звучит как «Решено? / Не помогло»
+  // Обращение-проблема: проверка — «Закрыть вопрос / Не помогло» (ТЗ v4.23)
   const problem = isProblemTask(task);
   const canEscalate =
     task.column !== 'draft' &&
@@ -255,8 +293,6 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
             onApprovePlan={() => void agent.approvePlan(task.id)}
             onRegenerate={() => void agent.regenerate(task.id)}
             onRetry={() => void agent.retry(task.id)}
-            onStepDone={() => void agent.stepDone(task.id)}
-            onStepFail={() => void agent.notSolved(task.id)}
             onFaq={(topicId) => void agent.faqAnswer(task.id, topicId)}
             onEscalate={canEscalate ? () => void agent.escalate(task.id) : undefined}
             onStop={() => agent.stop(task.id)}
@@ -278,7 +314,7 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
                 icon={<Check size={16} />}
                 onClick={() => void agent.solved(task.id)}
               >
-                Решено
+                Закрыть вопрос
               </Button>
               <Button
                 size="sm"
@@ -288,7 +324,16 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
               >
                 Не помогло
               </Button>
-              <span className="text-sm text-fg-muted">Проблема решена?</span>
+              <span className="text-sm text-fg-muted">
+                Всё в порядке? Закройте вопрос — или напишите, что не так
+              </span>
+              {task.escalation?.status === 'answered' && task.escalation.closeAt && (
+                // ТЗ v4.22: молчание после ответа специалиста — обращение закроется само
+                <span className="basis-full text-xs text-fg-muted">
+                  Если не ответите, обращение закроется само{' '}
+                  {agent.whenLabel(task.escalation.closeAt)}.
+                </span>
+              )}
             </div>
           )}
           {withSupport && (
@@ -365,13 +410,17 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
               counter={dock.counter}
               question={dock.question}
               options={dock.options}
+              note={dock.note}
+              placeholder={dock.placeholder}
               busy={busy}
               onAnswer={(t) => {
                 stick.current = true;
                 void agent.reply(task.id, t);
               }}
               onSkip={dock.skip ? () => void agent.skipQuestion(task.id) : undefined}
-              onSkipAll={() => void agent.answerWithoutQuestions(task.id)}
+              onSkipAll={
+                dock.skipAll ? () => void agent.answerWithoutQuestions(task.id) : undefined
+              }
             />
           ) : (
             <Composer

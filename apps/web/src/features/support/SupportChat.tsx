@@ -11,6 +11,8 @@ import { usePanelWidth } from '@/lib/panelWidth';
 import { useNow } from '@/lib/useNow';
 import {
   agoLabel,
+  holderLabel,
+  type Viewer,
   LONG_WAIT_MIN,
   minutesSince,
   queueInfo,
@@ -23,7 +25,17 @@ import {
 import { SpecialistPanel } from './SpecialistPanel';
 
 /** Строка заявки в списке режима «Чат» — как диалог в мессенджере. */
-function TicketRow({ t, queue, active }: { t: Ticket; queue: Queue; active: boolean }) {
+function TicketRow({
+  t,
+  queue,
+  active,
+  meId,
+}: {
+  t: Ticket;
+  queue: Queue;
+  active: boolean;
+  meId: string | null;
+}) {
   const now = useNow();
   const e = t.escalation;
   const waiting = e.status === 'new' || e.status === 'in_progress';
@@ -34,8 +46,9 @@ function TicketRow({ t, queue, active }: { t: Ticket; queue: Queue; active: bool
     e.status === 'answered'
       ? `ответили ${agoLabel(e.updatedAt, now)}`
       : e.status === 'resolved'
-        ? 'решена'
+        ? 'закрыта'
         : `ждёт ${waitLabel(e.createdAt, now)}`;
+  const holder = holderLabel(t, meId);
   return (
     <li>
       <Link
@@ -79,7 +92,7 @@ function TicketRow({ t, queue, active }: { t: Ticket; queue: Queue; active: bool
             <UrgencyBadge urgency={e.handoff.urgency} />
             {t.urgent && <UrgentMark reason={t.urgent.reason} forSpecialist />}
             <span>{ESCALATION_LABELS[e.status]}</span>
-            {t.takenBy && <span>· взял: {t.takenBy.name}</span>}
+            {holder && <span>· {holder}</span>}
           </span>
         </span>
       </Link>
@@ -92,11 +105,13 @@ function Group({
   list,
   queue,
   activeId,
+  meId,
 }: {
   title?: string;
   list: Ticket[];
   queue: Queue;
   activeId?: string;
+  meId: string | null;
 }) {
   if (list.length === 0) return null;
   return (
@@ -108,7 +123,7 @@ function Group({
       )}
       <ul className="flex flex-col gap-0.5">
         {list.map((t) => (
-          <TicketRow key={t.id} t={t} queue={queue} active={t.id === activeId} />
+          <TicketRow key={t.id} t={t} queue={queue} active={t.id === activeId} meId={meId} />
         ))}
       </ul>
     </section>
@@ -117,22 +132,23 @@ function Group({
 
 /**
  * Режим «Чат» пульта поддержки: слева заявки очереди (как диалоги в мессенджере),
- * справа — сводка ИИ и переписка с сотрудником. На телефоне заявка открывается поверх списка.
+ * справа — сводка ИИ и переписка с пользователем. На телефоне заявка открывается поверх списка.
  */
 export function SupportChat({
   queue,
   sort,
-  meId,
+  me,
   activeId,
   onClose,
 }: {
   queue: Queue;
   sort: SupportSort;
-  meId: string | null;
+  me: Viewer;
   activeId?: string;
   onClose: () => void;
 }) {
-  const by = useQueue(queue, sort, meId);
+  const by = useQueue(queue, sort, me);
+  const meId = me.id;
   const [showDone, setShowDone] = useState(false);
   const listWidth = usePanelWidth('tickets', 360, 280, 640);
   const single = queueInfo(queue).status;
@@ -159,11 +175,23 @@ export function SupportChat({
             <p className="text-sm text-fg-muted">В этой очереди пока нет заявок.</p>
           </div>
         ) : single ? (
-          <Group list={by[single]} queue={queue} activeId={activeId} />
+          <Group list={by[single]} queue={queue} activeId={activeId} meId={meId} />
         ) : (
           <>
-            <Group title="Ждут ответа" list={waiting} queue={queue} activeId={activeId} />
-            <Group title="Ждут пользователя" list={by.answered} queue={queue} activeId={activeId} />
+            <Group
+              title="Ждут ответа"
+              list={waiting}
+              queue={queue}
+              activeId={activeId}
+              meId={meId}
+            />
+            <Group
+              title="Ждут пользователя"
+              list={by.answered}
+              queue={queue}
+              activeId={activeId}
+              meId={meId}
+            />
             {by.resolved.length > 0 && (
               <div className="flex flex-col gap-1">
                 <button
@@ -177,9 +205,11 @@ export function SupportChat({
                     aria-hidden
                     className={cn('transition-transform duration-200', !showDone && '-rotate-90')}
                   />
-                  Решённые · {by.resolved.length}
+                  Закрытые · {by.resolved.length}
                 </button>
-                {showDone && <Group list={by.resolved} queue={queue} activeId={activeId} />}
+                {showDone && (
+                  <Group list={by.resolved} queue={queue} activeId={activeId} meId={meId} />
+                )}
               </div>
             )}
           </>
@@ -194,7 +224,7 @@ export function SupportChat({
           <Logo variant="mark" size={48} decorative />
           <p className="font-serif text-xl text-heading">Выберите заявку слева</p>
           <p className="max-w-sm text-sm text-fg-muted">
-            Сверху — сводка от ИИ, ниже — переписка с сотрудником. Ответ придёт в его чат.
+            Сверху — сводка от ИИ, ниже — переписка с пользователем. Ответ придёт в его чат.
           </p>
         </div>
       )}

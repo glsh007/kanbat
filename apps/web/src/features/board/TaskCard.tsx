@@ -1,5 +1,6 @@
 import {
-  COLUMN_LABELS,
+  canMoveManually,
+  moveLabel,
   COLUMNS,
   isProblemTask,
   STATUS_LABELS,
@@ -13,6 +14,7 @@ import {
   Check,
   GripVertical,
   Headset,
+  UserCheck,
   MoreHorizontal,
   RotateCcw,
   Send,
@@ -48,8 +50,6 @@ export type CardActions = {
   onRetry: () => void;
   onUnschedule: () => void;
   // режим поддержки
-  onStepDone: () => void;
-  onStepFail: () => void;
   onSolved: () => void;
   onNotSolved: () => void;
 };
@@ -126,7 +126,13 @@ export function StatusChip({ task }: { task: Task }) {
         </span>
       );
     default:
-      return null;
+      // пользователь сам перенёс в «Готово» (ТЗ v4.23)
+      return task.column === 'done' && task.selfSolved ? (
+        <span className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-full border border-line px-2 text-xs font-medium text-fg">
+          <UserCheck size={14} className="shrink-0" aria-hidden />
+          <span className="truncate">Решено самостоятельно</span>
+        </span>
+      ) : null;
   }
 }
 
@@ -239,11 +245,12 @@ function cardMenu(task: Task, a: CardActions): MenuItem[] {
     ];
   return [
     { kind: 'label', id: 'l', label: 'Переместить в столбец' },
+    // вперёд двигает помощник; вручную — только назад или в «Готово» (ТЗ v4.23)
     ...COLUMNS.map((c): MenuItem => ({
       id: c,
-      label: COLUMN_LABELS[c],
+      label: moveLabel(task.column, c),
       checked: task.column === c,
-      disabled: task.column === c,
+      disabled: !canMoveManually(task.column, c) || task.column === c,
       onSelect: () => a.onMove(c),
     })),
   ];
@@ -268,8 +275,10 @@ export function TaskCard({
   const inReview = task.status === 'awaiting_user' && task.checkpoint === 'review';
   const atPlan = task.status === 'awaiting_user' && task.checkpoint === 'plan';
   const atStep = task.status === 'awaiting_user' && task.checkpoint === 'step';
-  const atQuestions = task.status === 'awaiting_user' && !inReview && !atPlan && !atStep;
-  // Обращение-проблема (а не вопрос-консультация): проверка звучит как «Решено? / Не помогло»
+  const atOffer = task.status === 'awaiting_user' && task.checkpoint === 'offer';
+  const atQuestions =
+    task.status === 'awaiting_user' && !inReview && !atPlan && !atStep && !atOffer;
+  // Обращение-проблема (а не вопрос-консультация): проверка звучит как «Закрыть вопрос / Не помогло»
   const problem = isProblemTask(task);
   const questionNo =
     task.checkpoint === 'questions' && task.questions
@@ -282,7 +291,7 @@ export function TaskCard({
       footer = (
         <div className="relative z-10 flex flex-wrap gap-2" data-no-dnd>
           <Button size="sm" icon={<Check size={16} />} onClick={actions.onSolved}>
-            Решено
+            Закрыть вопрос
           </Button>
           <Button
             size="sm"
@@ -295,16 +304,33 @@ export function TaskCard({
         </div>
       );
     else if (atStep) {
+      // ответ на шаг — только своими словами (ТЗ v4.23)
       const step = task.plan?.[task.stepIndex];
       footer = (
         <div className="relative z-10 flex flex-col gap-2" data-no-dnd>
           {step?.check && <p className="text-sm font-medium text-heading">{step.check}</p>}
+          <QuickReply onSend={actions.onAnswer} questions={1} />
+        </div>
+      );
+    } else if (atOffer) {
+      // специалист — только с согласия (ТЗ v4.21)
+      footer = (
+        <div className="relative z-10 flex flex-col gap-2" data-no-dnd>
+          <p className="text-sm font-medium text-heading">Передать обращение специалисту?</p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" icon={<Check size={16} />} onClick={actions.onStepDone}>
-              {step?.yes || 'Получилось'}
+            <Button
+              size="sm"
+              icon={<Headset size={16} />}
+              onClick={() => actions.onAnswer('Передать специалисту')}
+            >
+              Передать
             </Button>
-            <Button size="sm" variant="secondary" onClick={actions.onStepFail}>
-              {step?.no || 'Не вышло'}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => actions.onAnswer(task.offer?.continueLabel || 'Продолжить с ИИ')}
+            >
+              {task.offer?.continueLabel || 'Продолжить с ИИ'}
             </Button>
           </div>
         </div>

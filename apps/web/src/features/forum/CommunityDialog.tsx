@@ -12,7 +12,7 @@ export type CommunityDialogMode = 'create' | 'propose' | 'edit' | 'approve';
 const TEXT: Record<CommunityDialogMode, { title: string; description: string; submit: string }> = {
   create: {
     title: 'Новое сообщество',
-    description: 'Сообщество сразу появится у всех сотрудников.',
+    description: 'Сообщество сразу появится у всех пользователей.',
     submit: 'Создать',
   },
   propose: {

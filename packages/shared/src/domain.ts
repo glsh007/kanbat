@@ -21,7 +21,7 @@ export const COLUMN_HINTS: Record<ColumnId, string> = {
   draft: 'Новые обращения и запланированные',
   clarify: 'ИИ разбирает обращение и уточняет только нужное',
   working: 'Решаем по шагам или у специалиста',
-  review: 'Проблема решена?',
+  review: 'Всё в порядке?',
   done: 'Решённые обращения',
 };
 
@@ -118,10 +118,15 @@ export interface PlanStep {
   instruction?: string;
   /** Итог шага по словам пользователя. */
   result?: 'ok' | 'fail';
-  /** Вопрос о результате шага и ответы по смыслу («Почта открылась?» — «Да, открылась» / «Нет»). */
+  /** Вопрос о результате шага («Почта открылась?»). */
   check?: string;
+  /** Устарело (до v4.21): подписи кнопок «Да / Нет». Ответ теперь пишет сам человек. */
   yes?: string;
   no?: string;
+  /** Что человек ответил на шаг своими словами (ТЗ v4.21) — уходит в сводку специалисту. */
+  answer?: string;
+  /** Шаг добавлен после неудачи предыдущего — вместо него (ТЗ v4.21). */
+  added?: boolean;
 }
 
 export const URGENCY_LABELS: Record<Urgency, string> = {
@@ -151,8 +156,30 @@ export const ESCALATION_LABELS: Record<EscalationStatus, string> = {
   new: 'Новые',
   in_progress: 'В работе',
   answered: 'Ждёт пользователя',
-  resolved: 'Решено',
+  resolved: 'Закрыто',
 };
+
+/** Почему специалист закрыл заявку без решения (ТЗ v4.22). */
+export type CloseReason = 'spam' | 'duplicate' | 'wrong' | 'other';
+
+export const CLOSE_REASON_LABELS: Record<CloseReason, string> = {
+  spam: 'спам или бессмыслица',
+  duplicate: 'повтор другой заявки',
+  wrong: 'не по адресу',
+  other: 'другая причина',
+};
+
+/** Как закрыта заявка (ТЗ v4.22): подтвердил человек, закрылась сама или специалист — без решения. */
+export interface EscalationClosed {
+  by: 'user' | 'auto' | 'specialist';
+  at: string;
+  reason?: CloseReason;
+  note?: string;
+  /** Кто закрыл (специалист). */
+  name?: string;
+  /** Пользователь перетащил обращение в «Готово»: решил сам (ТЗ v4.23). */
+  self?: boolean;
+}
 
 export interface Escalation {
   status: EscalationStatus;
@@ -163,21 +190,49 @@ export interface Escalation {
   updatedAt: string;
   /** Ревизия статуса: растёт при каждой смене — так владелец и специалист не перетирают друг друга. */
   rev?: number;
+  /** Как закрыта (ТЗ v4.22); null — открыта. */
+  closed?: EscalationClosed | null;
+  /** Когда заявка закроется сама, если человек не ответит (ставит сервер после ответа специалиста). */
+  closeAt?: string | null;
+  /** Когда напомнить человеку об автозакрытии. */
+  remindAt?: string | null;
 }
 
 /** Переход задачи назад по доске = «доработать» (ТЗ, п. 3). */
 export const isBackwardMove = (from: ColumnId, to: ColumnId): boolean =>
   COLUMNS.indexOf(to) < COLUMNS.indexOf(from);
 
+/**
+ * Ручной перенос карточки (ТЗ v4.23, п. 3): назад — «доработать»; вперёд двигает помощник —
+ * вручную можно только в «Готово», и тогда обращение отмечается «Решено самостоятельно».
+ */
+export const canMoveManually = (from: ColumnId, to: ColumnId): boolean =>
+  from === to || to === 'done' || isBackwardMove(from, to);
+
+/** Подпись пункта «Переместить в столбец»: в «Готово» вручную — «решено самостоятельно». */
+export const moveLabel = (from: ColumnId, to: ColumnId): string =>
+  to === 'done' && from !== 'done' ? 'Готово — решено самостоятельно' : COLUMN_LABELS[to];
+
 /** Что ждёт ответа пользователя на контрольной точке. */
 /** describe — обращения пока нет («F», «привет», «ничего не случилось»): ждём, что человек расскажет. */
 /** faq — ИИ недоступен, человек выбирает частый вопрос или передаёт специалисту. */
 /** ask — помощник ждёт данные или результат действия (ТЗ v4.13): кнопки-ответы в `replyOptions`. */
-export type Checkpoint = 'describe' | 'faq' | 'questions' | 'plan' | 'step' | 'review' | 'ask';
+/** offer — помощник предложил передать обращение специалисту и ждёт согласия (ТЗ v4.21). */
+export type Checkpoint =
+  'describe' | 'faq' | 'questions' | 'plan' | 'step' | 'review' | 'ask' | 'offer';
+
+/** Предложение передать обращение специалисту — только с согласия человека (ТЗ v4.21). */
+export interface SpecialistOffer {
+  /** Почему предлагаем — уходит в сводку, если человек согласится. */
+  reason: string;
+  /** Подпись второй кнопки: «Продолжить с ИИ» или «Другие инструкции», когда ИИ недоступен. */
+  continueLabel: string;
+  at: string;
+}
 
 /** Шаг сценария — чтобы «Повторить» после ошибки запускал именно его. */
 export type AgentStep =
-  'classify' | 'questions' | 'plan' | 'answer' | 'execute' | 'steps' | 'handoff';
+  'classify' | 'questions' | 'plan' | 'answer' | 'execute' | 'steps' | 'step-reply' | 'handoff';
 
 /** Просьба «Срочно» от человека (ТЗ v4.16). */
 export interface UrgentRequest {
@@ -227,6 +282,20 @@ export interface Task {
   stepIndex: number;
   /** Сколько сценариев решения уже попробовали. */
   attempts: number;
+  /** Сколько раз шаг или решение не помогли (ТЗ v4.21): после 2 — предложить специалиста. */
+  failures?: number;
+  /** Число неудач, когда человек отказался от специалиста: снова предложим не раньше чем через 2. */
+  offerDeclinedAt?: number | null;
+  /** Открытое предложение передать специалисту (точка `offer`). */
+  offer?: SpecialistOffer | null;
+  /** Подсказка «специалист всегда рядом» уже показана (один раз на обращение). */
+  hintShown?: boolean;
+  /** Напоминание об автозакрытии уже показано — для этого срока `closeAt` (ТЗ v4.22). */
+  closeReminded?: string | null;
+  /** На каком шаге помощник уже переспросил результат — второй раз не переспрашивает (ТЗ v4.23). */
+  askedStep?: number | null;
+  /** Пользователь сам перенёс обращение в «Готово» — «Решено самостоятельно» (ТЗ v4.23). Снимается при возобновлении. */
+  selfSolved?: boolean;
   /** Передача специалисту (null — не передавали). */
   escalation: Escalation | null;
   /** Кнопки-ответы по смыслу для точки `ask` («Для себя», «Для ребёнка»), ТЗ v4.13. */
@@ -257,7 +326,9 @@ export type MessageKind =
   | 'handoff'
   | 'specialist'
   /** ИИ недоступен: выбор из частых вопросов (id тем в `faq`). */
-  | 'faq';
+  | 'faq'
+  /** Короткая подсказка без «пузыря»: «Специалист всегда рядом…» (ТЗ v4.21). */
+  | 'hint';
 
 export interface Message {
   id: string;
@@ -276,6 +347,8 @@ export interface Message {
   faq?: string[];
   /** Ответ из готовой инструкции, а не от модели. */
   canned?: boolean;
+  /** Реакция помощника на ответ по шагу (ТЗ v4.21) — не «перегенерировать»: это часть шагов. */
+  reaction?: boolean;
   /** Что скрыто в сообщении человека (ТЗ v4.16): СНИЛС, паспорт, карта — показываем пометку. */
   masked?: PiiKind[];
   /** Отчёт пользователя о шаге решения. */
@@ -297,7 +370,7 @@ export interface SectionMemory {
 }
 
 /**
- * Обращение-проблема (шаги или специалист): проверка звучит «Решено / Не помогло».
+ * Обращение-проблема (шаги или специалист): проверка — «Закрыть вопрос / Не помогло» (ТЗ v4.23).
  * Вопрос и заявка (answer, request) — проверяются кнопками по смыслу ответа (ТЗ v4.13).
  */
 export function isProblemTask(t: Pick<Task, 'triage' | 'escalation'>): boolean {

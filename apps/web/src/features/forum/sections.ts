@@ -6,7 +6,7 @@ import { forumApi } from '@/lib/api';
 /** Сообщества форума с количеством тем — загружаются один раз и обновляются после изменений. */
 export const useForumSections = create<{
   sections: ForumSection[];
-  /** Сотруднику — свои предложения сообществ; специалисту — ждущие решения. */
+  /** Пользователю — свои предложения сообществ; специалисту — ждущие решения. */
   proposals: CommunityProposal[];
   load: () => Promise<void>;
   loadProposals: () => Promise<void>;

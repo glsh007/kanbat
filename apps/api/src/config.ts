@@ -36,6 +36,11 @@ export const config = {
   dmQuietDays: Math.max(0.0001, Number(process.env.DM_QUIET_DAYS) || 3),
   dmTotalDays: Math.max(0.0001, Number(process.env.DM_TOTAL_DAYS) || 7),
   ticketKeepDays: Math.max(7, Number(process.env.TICKET_KEEP_DAYS) || 90),
+  /**
+   * Длина «часа» для сроков заявок (ТЗ v4.22), мс. Только для автопроверок: `SUPPORT_HOUR_MS=2000` —
+   * «24 часа» проходят за 48 секунд. В работе не задавайте.
+   */
+  supportHourMs: Math.max(200, Number(process.env.SUPPORT_HOUR_MS) || 3_600_000),
   /** Сколько прокси перед сервером (Caddy, туннель): 1 по умолчанию, 0 — сервер смотрит в интернет сам. */
   trustProxy: Math.max(0, Math.floor(Number(process.env.TRUST_PROXY ?? 1) || 0)),
   /** Отдавать собранный сайт с этого же сервера (npm run share, Docker). */

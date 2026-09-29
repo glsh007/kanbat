@@ -5,6 +5,7 @@ import type {
   OrgAddress,
   OrgTemplate,
   OrgTone,
+  SupportTimers,
 } from '@app/shared';
 import { Check, MessageSquareText, Plus, RotateCcw, Save, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -14,7 +15,8 @@ import { IconButton } from '@/components/ui/IconButton';
 import { useNavTitle } from '@/features/nav/useNavTitle';
 import { Markdown } from '@/features/task/Markdown';
 import { AppShell } from '@/layout/AppShell';
-import { orgApi } from '@/lib/api';
+import { orgApi, serverApi } from '@/lib/api';
+import { useSupportTimers } from '@/features/support/tickets';
 import { cn } from '@/lib/cn';
 import { useUser } from '@/lib/session';
 
@@ -247,6 +249,7 @@ function OrgEditor() {
             <Preview profile={draft} />
           </>
         )}
+        <SupportTimersBlock />
       </div>
 
       {draft && (
@@ -285,6 +288,82 @@ function OrgEditor() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+/**
+ * Сроки заявок (ТЗ v4.22): через сколько заявка закрывается сама, если пользователь молчит после ответа,
+ * и через сколько принятая заявка без ответа возвращается в общую очередь. Сохраняются сразу.
+ */
+function SupportTimersBlock() {
+  const [timers, setTimers] = useState<SupportTimers | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    serverApi
+      .supportSettings()
+      .then((t) => alive && setTimers(t))
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const save = async (patch: Partial<SupportTimers>) => {
+    if (!timers) return;
+    const prev = timers;
+    setTimers({ ...timers, ...patch });
+    setError(null);
+    try {
+      const t = await serverApi.saveSupportSettings(patch);
+      setTimers(t);
+      useSupportTimers.setState(t);
+      setNote('Сохранено — действует для всех заявок.');
+    } catch (e) {
+      setTimers(prev);
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <Block
+      title="Сроки заявок"
+      hint="Заявку закрывает пользователь («Закрыть вопрос») или срок. Меняется сразу, без кнопки «Сохранить»."
+    >
+      {!timers ? (
+        <p className="text-sm text-fg-muted">{error ?? 'Загрузка…'}</p>
+      ) : (
+        <>
+          <Choice
+            label="Автозакрытие: пользователь молчит после ответа специалиста"
+            value={String(timers.closeHours) as '4' | '24' | '72'}
+            onChange={(v) => void save({ closeHours: Number(v) as SupportTimers['closeHours'] })}
+            options={[
+              ['4', '4 часа'],
+              ['24', '24 часа'],
+              ['72', '3 дня'],
+            ]}
+          />
+          <Choice
+            label="Автовозврат в общую очередь: принятая заявка без ответа"
+            value={String(timers.returnHours) as '2' | '4' | '8'}
+            onChange={(v) => void save({ returnHours: Number(v) as SupportTimers['returnHours'] })}
+            options={[
+              ['2', '2 часа'],
+              ['4', '4 часа'],
+              ['8', '8 часов'],
+            ]}
+          />
+          <p className="text-xs text-fg-muted" aria-live="polite">
+            {error ??
+              note ??
+              'За несколько часов до автозакрытия пользователь получит напоминание в чате.'}
+          </p>
+        </>
+      )}
+    </Block>
   );
 }
 

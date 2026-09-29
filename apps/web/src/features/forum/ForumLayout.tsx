@@ -117,7 +117,7 @@ function CommunityInfo({
           <p className="text-sm leading-relaxed">
             {section
               ? section.description
-              : 'Сообщество сотрудников: похожие проблемы и ответы коллег. Часто решение уже есть — поищите, прежде чем создавать обращение.'}
+              : 'Сообщество пользователей: похожие проблемы и ответы коллег. Часто решение уже есть — поищите, прежде чем создавать обращение.'}
           </p>
           <dl className="grid grid-cols-3 gap-2 border-y border-line py-3">
             {stats.map(([n, label], i) => (
@@ -227,7 +227,7 @@ const PROPOSAL_STATUS: Record<string, string> = {
   rejected: 'отклонено',
 };
 
-/** Сотруднику — его предложения сообществ и что с ними решили. */
+/** Пользователю — его предложения сообществ и что с ними решили. */
 function MyProposals({ proposals }: { proposals: CommunityProposal[] }) {
   const mine = proposals.filter((p) => p.mine);
   if (!mine.length) return null;

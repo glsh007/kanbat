@@ -32,7 +32,7 @@ import { DmBadge } from '@/features/dm/DmBadge';
 import { UserCard } from './UserCard';
 
 /**
- * Меню сотрудника: логотип, его разделы, Бат-Форум, тема.
+ * Меню пользователя: логотип, его разделы, Бат-Форум, тема.
  * Используется и в боковой панели (desktop), и в выдвижном листе (mobile).
  */
 export function SectionNav({ onNavigate }: { onNavigate?: () => void }) {

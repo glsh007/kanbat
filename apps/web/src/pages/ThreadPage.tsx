@@ -284,7 +284,7 @@ export function ThreadPage() {
         <p className="flex items-center gap-2 rounded-panel border border-dashed border-line-strong px-3 py-3 text-sm text-fg-muted">
           <Lock size={16} aria-hidden className="shrink-0" />
           {page.canModerate
-            ? 'Тема закрыта для ответов сотрудников — вы можете ответить как специалист.'
+            ? 'Тема закрыта для ответов пользователей — вы можете ответить как специалист.'
             : 'Тема закрыта для ответов. Если вопрос остался — создайте новую тему.'}
         </p>
       )}

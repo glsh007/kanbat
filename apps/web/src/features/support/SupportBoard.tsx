@@ -1,13 +1,19 @@
 import { ESCALATION_LABELS, type EscalationStatus, type Ticket } from '@app/shared';
-import { AlarmClock, Clock, Hand } from 'lucide-react';
+import { AlarmClock, Clock, Hand, Undo2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Logo } from '@/brand/Logo';
 import { UrgencyBadge } from '@/components/ui/UrgencyBadge';
 import { UrgentMark } from '@/components/ui/UrgentMark';
 import { cn } from '@/lib/cn';
 import { useNow } from '@/lib/useNow';
+import { useSupportTimers } from './tickets';
 import {
   agoLabel,
+  closedLabel,
+  holderLabel,
+  leftLabel,
+  returnedLabel,
+  type Viewer,
   LONG_WAIT_MIN,
   minutesSince,
   queueColumns,
@@ -25,21 +31,26 @@ const TOP: Record<EscalationStatus, string> = {
 };
 const HINT: Record<EscalationStatus, string> = {
   new: 'Сюда попадают заявки, которые ИИ передал со сводкой',
-  in_progress: 'Заявки, взятые в работу',
-  answered: 'Вы ответили — ждём, помогло ли',
-  resolved: 'Закрытые заявки',
+  in_progress: 'Заявки, принятые в работу',
+  answered: 'Ответили — ждём, помогло ли. Молчание — закроется само',
+  resolved: 'Закрывает пользователь («Закрыть вопрос») или срок',
 };
 
 function SupportCard({
   ticket: task,
   onOpen,
   active,
+  meId,
 }: {
   ticket: Ticket;
   onOpen: () => void;
   active: boolean;
+  meId: string | null;
 }) {
   const now = useNow();
+  const { returnHours } = useSupportTimers();
+  const holder = holderLabel(task, meId);
+  const back = returnedLabel(task, returnHours);
   const e = task.escalation!;
   const section = `от ${task.ownerName}`;
   // давно ждёт: ещё никто не ответил, а прошло больше LONG_WAIT_MIN минут
@@ -83,6 +94,7 @@ function SupportCard({
             <span className="inline-flex items-center gap-1 text-xs text-fg-muted">
               <Clock size={13} aria-hidden />
               ответили {agoLabel(e.updatedAt, now)}
+              {e.closeAt && ` · закроется ${leftLabel(e.closeAt, now)}`}
             </span>
           )}
         </div>
@@ -102,11 +114,21 @@ function SupportCard({
           {e.handoff.service}
           {section && ` · ${section}`}
         </p>
-        {e.status !== 'new' && (
-          <p className="flex items-center gap-1 text-xs text-fg-muted">
-            <Hand size={12} aria-hidden />
-            {task.takenBy ? `взял: ${task.takenBy.name}` : 'никто не взял'}
+        {back && (
+          <p className="flex items-center gap-1 text-xs font-medium text-heading">
+            <Undo2 size={12} aria-hidden />
+            {back}
           </p>
+        )}
+        {e.status === 'resolved' ? (
+          <p className="text-xs text-fg-muted">{closedLabel(task)}</p>
+        ) : (
+          holder && (
+            <p className="flex items-center gap-1 text-xs text-fg-muted">
+              <Hand size={12} aria-hidden />
+              {holder}
+            </p>
+          )
         )}
       </article>
     </motion.li>
@@ -123,15 +145,15 @@ export function SupportBoard({
   onOpen,
   queue,
   sort,
-  meId,
+  me,
 }: {
   activeId?: string;
   onOpen: (id: string) => void;
   queue: Queue;
   sort: SupportSort;
-  meId: string | null;
+  me: Viewer;
 }) {
-  const by = useQueue(queue, sort, meId);
+  const by = useQueue(queue, sort, me);
   const columns = queueColumns(queue);
   const single = columns.length === 1;
   return (
@@ -177,6 +199,7 @@ export function SupportBoard({
                   key={t.id}
                   ticket={t}
                   active={t.id === activeId}
+                  meId={me.id}
                   onOpen={() => onOpen(t.id)}
                 />
               ))}

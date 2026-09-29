@@ -48,6 +48,21 @@ export interface BoardBlob {
 
 export type EscalationStatus = 'new' | 'in_progress' | 'answered' | 'resolved';
 
+/** Почему специалист закрыл заявку без решения (ТЗ v4.22). */
+export type CloseReason = 'spam' | 'duplicate' | 'wrong' | 'other';
+
+/** Как закрыта заявка (ТЗ v4.22): подтвердил человек, закрылась сама или специалист — без решения. */
+export interface EscalationClosed {
+  by: 'user' | 'auto' | 'specialist';
+  at: string;
+  reason?: CloseReason;
+  note?: string;
+  /** Кто закрыл (специалист). */
+  name?: string;
+  /** Пользователь перетащил обращение в «Готово»: решил сам (ТЗ v4.23). */
+  self?: boolean;
+}
+
 export interface Escalation {
   status: EscalationStatus;
   handoff: Record<string, unknown>;
@@ -55,6 +70,19 @@ export interface Escalation {
   createdAt: string;
   updatedAt: string;
   rev?: number;
+  closed?: EscalationClosed | null;
+  /** Когда заявка закроется сама, если человек не ответит (ставит сервер после ответа специалиста). */
+  closeAt?: string | null;
+  /** Когда напомнить человеку об автозакрытии. */
+  remindAt?: string | null;
+}
+
+/** Сроки заявок (ТЗ v4.22): настраивает администратор. */
+export interface SupportTimers {
+  /** Через сколько часов молчания после ответа специалиста заявка закрывается сама. */
+  closeHours: 4 | 24 | 72;
+  /** Через сколько часов без ответа принятая заявка возвращается в общую очередь. */
+  returnHours: 2 | 4 | 8;
 }
 
 export interface TicketReply {
@@ -73,14 +101,26 @@ export interface Ticket {
   escalation: Escalation;
   messages: unknown[];
   replies: TicketReply[];
-  /** Какой специалист взял обращение (null — пока никто). */
+  /** Какой специалист принял заявку в работу (null — она в общей очереди). */
   takenBy?: { id: string; name: string } | null;
+  /** Когда принята в работу — от этого считается автовозврат (ТЗ v4.22). */
+  takenAt?: string | null;
+  /** Почему заявка вернулась в общую очередь (ТЗ v4.22). */
+  returned?: TicketReturn | null;
   /** Просьба «Срочно» от человека с причиной (ТЗ v4.16) — только просьба, на очередь не влияет. */
   urgent?: { reason: string; at: string } | null;
   /** Переписка удалена по сроку хранения, осталась сводка (ТЗ v4.16). */
   archived?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TicketReturn {
+  at: string;
+  /** timeout — нет ответа N часов; manual — специалист вернул сам; admin — вернул администратор; reopened — человек возобновил закрытую. */
+  reason: 'timeout' | 'manual' | 'admin' | 'reopened';
+  /** У кого была заявка. */
+  from?: string;
 }
 
 // ——— Форум (ТЗ v4.2, п. 16) ———

@@ -1,4 +1,9 @@
-import { URGENCY_ORDER, type EscalationStatus, type Ticket } from '@app/shared';
+import {
+  CLOSE_REASON_LABELS,
+  URGENCY_ORDER,
+  type EscalationStatus,
+  type Ticket,
+} from '@app/shared';
 import {
   BellDot,
   CircleCheck,
@@ -37,19 +42,38 @@ export type SupportSort = 'urgency' | 'wait';
 export type SupportView = 'board' | 'chat';
 
 /**
- * Очереди пульта поддержки (ТЗ v4.4, п. 14) — пункты меню специалиста.
- * «Все» — вся доска; «Мои» — взятые мной; остальные — один статус.
+ * Очереди пульта поддержки (ТЗ v4.4, п. 14; v4.22) — пункты меню специалиста.
+ * «Все заявки» — всё, с пометкой «у кого»; «Новые» — общая очередь; «Мои заявки» — принятые мной
+ * (личный кабинет). «В работе» и «Ждут пользователя» по всем специалистам — только у администратора.
  */
 export type Queue = 'all' | 'new' | 'mine' | 'work' | 'waiting' | 'done';
 
-export const QUEUES: { id: Queue; label: string; icon: LucideIcon; status?: EscalationStatus }[] = [
+/** Кто смотрит пульт. */
+export type Viewer = { id: string | null; admin: boolean };
+
+export const QUEUES: {
+  id: Queue;
+  label: string;
+  icon: LucideIcon;
+  status?: EscalationStatus;
+  adminOnly?: boolean;
+}[] = [
   { id: 'all', label: 'Все заявки', icon: Inbox },
   { id: 'new', label: 'Новые', icon: BellDot, status: 'new' },
-  { id: 'mine', label: 'Мои', icon: Hand },
-  { id: 'work', label: 'В работе', icon: Wrench, status: 'in_progress' },
-  { id: 'waiting', label: 'Ждут пользователя', icon: Hourglass, status: 'answered' },
-  { id: 'done', label: 'Решённые', icon: CircleCheck, status: 'resolved' },
+  { id: 'mine', label: 'Мои заявки', icon: Hand },
+  { id: 'work', label: 'В работе', icon: Wrench, status: 'in_progress', adminOnly: true },
+  {
+    id: 'waiting',
+    label: 'Ждут пользователя',
+    icon: Hourglass,
+    status: 'answered',
+    adminOnly: true,
+  },
+  { id: 'done', label: 'Закрытые', icon: CircleCheck, status: 'resolved' },
 ];
+
+/** Очереди в меню этого человека. */
+export const queuesFor = (admin: boolean) => QUEUES.filter((q) => admin || !q.adminOnly);
 
 export const isQueue = (v: unknown): v is Queue => QUEUES.some((q) => q.id === v);
 export const queueInfo = (q: Queue) => QUEUES.find((x) => x.id === q)!;
@@ -64,29 +88,30 @@ export function queueColumns(q: Queue): EscalationStatus[] {
   return q === 'mine' ? ['in_progress', 'answered', 'resolved'] : STATUSES;
 }
 
-export function inQueue(t: Ticket, q: Queue, meId: string | null): boolean {
+export function inQueue(t: Ticket, q: Queue, me: Viewer): boolean {
   if (q === 'all') return true;
-  if (q === 'mine') return !!meId && t.takenBy?.id === meId;
+  if (q === 'mine') return !!me.id && t.takenBy?.id === me.id;
   return t.escalation.status === queueInfo(q).status;
 }
 
 const isOpen = (t: Ticket) => t.escalation.status !== 'resolved';
 
 /** Счётчики для меню: открытые заявки в каждой очереди (у «Решённых» — все решённые). */
-export function useQueueCounts(meId: string | null): Record<Queue, number> {
+export function useQueueCounts(me: Viewer): Record<Queue, number> {
   const tickets = useTickets((s) => s.tickets);
+  const { id, admin } = me;
   return useMemo(() => {
     const counts = Object.fromEntries(QUEUES.map((q) => [q.id, 0])) as Record<Queue, number>;
     for (const t of tickets)
       for (const q of QUEUES)
-        if (inQueue(t, q.id, meId) && (q.id === 'done' || isOpen(t))) counts[q.id] += 1;
+        if (inQueue(t, q.id, { id, admin }) && (q.id === 'done' || isOpen(t))) counts[q.id] += 1;
     return counts;
-  }, [tickets, meId]);
+  }, [tickets, id, admin]);
 }
 
 /**
  * «Сначала срочные» — по срочности, затем кто дольше ждёт; «Дольше ждут» — по времени передачи.
- * Решённые — сначала недавние.
+ * Закрытые — сначала недавние.
  */
 export function sortTickets(list: Ticket[], sort: SupportSort): Ticket[] {
   const oldest = (a: Ticket, b: Ticket) =>
@@ -104,15 +129,50 @@ export function sortTickets(list: Ticket[], sort: SupportSort): Ticket[] {
 }
 
 /** Заявки очереди, разложенные по статусам и отсортированные. */
-export function useQueue(q: Queue, sort: SupportSort, meId: string | null) {
+export function useQueue(q: Queue, sort: SupportSort, me: Viewer) {
   const tickets = useTickets((s) => s.tickets);
+  const { id, admin } = me;
   return useMemo(() => {
     const by = Object.fromEntries(STATUSES.map((s) => [s, [] as Ticket[]])) as Record<
       EscalationStatus,
       Ticket[]
     >;
-    for (const t of tickets) if (inQueue(t, q, meId)) by[t.escalation.status]?.push(t);
+    for (const t of tickets) if (inQueue(t, q, { id, admin })) by[t.escalation.status]?.push(t);
     for (const s of STATUSES) by[s] = sortTickets(by[s], sort);
     return by;
-  }, [tickets, q, sort, meId]);
+  }, [tickets, q, sort, id, admin]);
+}
+
+/** «ведёте вы» / «ведёт Ольга» / null — кто ведёт заявку (имя не склоняем). */
+export function holderLabel(t: Ticket, meId: string | null): string | null {
+  if (!t.takenBy) return null;
+  return t.takenBy.id === meId ? 'ведёте вы' : `ведёт ${t.takenBy.name}`;
+}
+
+/** «через 5 ч», «через 40 мин» — сколько осталось до срока. */
+export function leftLabel(toIso: string, now: number): string {
+  const min = Math.max(0, Math.round((new Date(toIso).getTime() - now) / 60_000));
+  if (min < 1) return 'вот-вот';
+  if (min < 60) return `через ${min} мин`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `через ${h} ч` : `через ${Math.round(h / 24)} дн`;
+}
+
+/** Как закрыта заявка — для пульта. */
+export function closedLabel(t: Ticket): string {
+  const c = t.escalation.closed;
+  if (!c) return 'закрыта';
+  if (c.by === 'user') return c.self ? 'пользователь решил сам' : 'закрыл пользователь';
+  if (c.by === 'auto') return 'закрыта автоматически: пользователь не ответил';
+  return `без решения: ${CLOSE_REASON_LABELS[c.reason ?? 'other']}${c.note ? ` — «${c.note}»` : ''}`;
+}
+
+/** Почему заявка снова в общей очереди. */
+export function returnedLabel(t: Ticket, returnHours: number): string | null {
+  const r = t.returned;
+  if (!r || t.escalation.status !== 'new') return null;
+  const from = r.from ? ` (вёл(а) ${r.from})` : '';
+  if (r.reason === 'timeout') return `вернулась: нет ответа ${returnHours} ч${from}`;
+  if (r.reason === 'reopened') return 'пользователь возобновил обращение';
+  return `возвращена в очередь${from}`;
 }

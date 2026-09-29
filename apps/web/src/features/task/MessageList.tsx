@@ -28,8 +28,6 @@ type Props = {
   onApprovePlan: () => void;
   onRegenerate: () => void;
   onRetry: () => void;
-  onStepDone: () => void;
-  onStepFail: () => void;
   /** Без ИИ: выбран частый вопрос. */
   onFaq?: (topicId: string) => void;
   /** Передать специалисту (undefined — сейчас нельзя). */
@@ -226,8 +224,6 @@ function Typing({
  * варианты ответа нажимаются, план подтверждается одной кнопкой.
  */
 export function MessageList({
-  onStepDone,
-  onStepFail,
   task,
   messages,
   live,
@@ -294,86 +290,98 @@ export function MessageList({
             </li>
           );
 
+        if (m.kind === 'hint')
+          return (
+            <li key={m.id} className="flex items-start gap-2 text-sm text-fg-muted">
+              <Headset size={16} aria-hidden className="mt-0.5 shrink-0" />
+              <span>{m.content}</span>
+            </li>
+          );
+
         if (m.kind === 'steps' && m.steps) {
           const active = m === lastSteps;
-          const plan = active ? task.plan : null;
+          // один шаг — простым текстом, как сказал бы человек (ТЗ v4.21)
+          if (m.steps.length === 1) {
+            const st = m.steps[0]!;
+            return (
+              <li key={m.id} className="flex flex-col gap-1">
+                <Markdown
+                  text={[m.content, `**${st.title}.** ${st.instruction}`, st.check]
+                    .filter(Boolean)
+                    .join('\n\n')}
+                />
+              </li>
+            );
+          }
+          // несколько — компактный чек-лист: пройденные свёрнуты, текущий раскрыт, будущие — серые
+          const steps = active && task.plan?.length ? task.plan : m.steps;
           const current = active && task.checkpoint === 'step' ? task.stepIndex : -1;
           return (
             <li key={m.id} className="flex flex-col gap-3">
               <p>{m.content}</p>
-              <ol className="flex flex-col gap-2">
-                {m.steps.map((st, i) => {
-                  const res = plan?.[i]?.result;
+              <ol className="flex flex-col gap-1" aria-label="Шаги решения">
+                {steps.map((st, i) => {
+                  const res = 'result' in st ? st.result : undefined;
                   const isCurrent = i === current;
                   return (
                     <li
                       key={i}
                       aria-current={isCurrent ? 'step' : undefined}
                       className={cn(
-                        'rounded-card border bg-surface p-3',
-                        isCurrent ? 'border-accent shadow-card' : 'border-line',
-                        !isCurrent && current >= 0 && i > current && 'opacity-70',
+                        'flex items-start gap-2.5 rounded-card px-3',
+                        isCurrent
+                          ? 'my-1 border border-accent bg-surface py-3 shadow-card'
+                          : 'py-1.5',
+                        !isCurrent && !res && 'text-fg-muted',
                       )}
                     >
-                      <div className="flex items-start gap-2.5">
-                        <span
-                          aria-hidden
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium',
+                          res === 'ok'
+                            ? 'bg-primary text-on-primary'
+                            : res === 'fail'
+                              ? 'border border-line-strong text-fg-muted'
+                              : isCurrent
+                                ? 'border border-accent text-heading'
+                                : 'border border-line text-fg-muted',
+                        )}
+                      >
+                        {res === 'ok' ? (
+                          <Check size={12} />
+                        ) : res === 'fail' ? (
+                          <X size={12} />
+                        ) : (
+                          i + 1
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p
                           className={cn(
-                            'mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium',
-                            res === 'ok'
-                              ? 'bg-primary text-on-primary'
-                              : res === 'fail'
-                                ? 'border border-line-strong text-fg'
-                                : 'border border-line-strong text-fg-muted',
+                            isCurrent ? 'font-medium text-heading' : 'text-[15px]',
+                            res === 'fail' && 'text-fg-muted line-through decoration-line-strong',
+                            res === 'ok' && 'text-fg-muted',
                           )}
                         >
-                          {res === 'ok' ? (
-                            <Check size={12} />
-                          ) : res === 'fail' ? (
-                            <X size={12} />
-                          ) : (
-                            i + 1
+                          {st.title}
+                          {res && (
+                            <span className="sr-only">
+                              {res === 'ok' ? ' — сделано' : ' — не подошло'}
+                            </span>
                           )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className={cn('font-medium', res ? 'text-fg-muted' : 'text-heading')}>
-                            {st.title}
-                            {res && (
-                              <span className="sr-only">
-                                {res === 'ok' ? ' — выполнено' : ' — не помогло'}
-                              </span>
-                            )}
+                        </p>
+                        {res === 'fail' && (
+                          <p aria-hidden className="text-xs text-fg-muted">
+                            не подошло
                           </p>
-                          {(isCurrent || !active || current < 0) && st.instruction && (
-                            <p className="mt-1 text-sm">{st.instruction}</p>
-                          )}
-                          {isCurrent && (
-                            <div className="mt-2.5 flex flex-col gap-2">
-                              {/* вопрос о результате и ответы — по смыслу шага (их формулирует модель) */}
-                              {st.check && (
-                                <p className="text-sm font-medium text-heading">{st.check}</p>
-                              )}
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  size="sm"
-                                  icon={<Check size={16} />}
-                                  onClick={onStepDone}
-                                  disabled={busy}
-                                >
-                                  {st.yes || 'Получилось'}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={onStepFail}
-                                  disabled={busy}
-                                >
-                                  {st.no || 'Не получилось'}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        )}
+                        {isCurrent && st.instruction && (
+                          <p className="mt-1 text-sm text-fg">{st.instruction}</p>
+                        )}
+                        {isCurrent && st.check && (
+                          <p className="mt-2 text-sm font-medium text-heading">{st.check}</p>
+                        )}
                       </div>
                     </li>
                   );
@@ -381,7 +389,7 @@ export function MessageList({
               </ol>
               {current >= 0 && (
                 <p className="text-sm text-fg-muted">
-                  Если ответ другой — напишите его ниже своими словами.
+                  Расскажите внизу своими словами, как прошёл шаг.
                 </p>
               )}
             </li>
@@ -554,7 +562,14 @@ export function MessageList({
           );
         }
 
-        const canRegen = m === lastText && !busy && !live && !m.canned;
+        const canRegen =
+          m === lastText &&
+          !busy &&
+          !live &&
+          !m.canned &&
+          !m.reaction &&
+          task.checkpoint !== 'step' &&
+          task.checkpoint !== 'offer';
         return (
           <li key={m.id} className="flex flex-col gap-1">
             <Markdown text={m.content} />

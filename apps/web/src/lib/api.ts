@@ -11,10 +11,15 @@ import type {
   SortItem,
   SortResult,
   StepsResult,
+  StepReplyResult,
+  PlanStep,
   StreamMode,
   Triage,
   Ticket,
   TicketPush,
+  SupportTimers,
+  SpecialistRef,
+  CloseReason,
   ForumDraft,
   ForumSection,
   ForumSort,
@@ -156,6 +161,31 @@ export const api = {
     model: string | null,
     signal?: AbortSignal,
   ) => post<StepsResult>('steps', { messages, urgent, attempt, model }, signal),
+  /** Ответ человека на шаг своими словами (ТЗ v4.21): реакция и итог. */
+  stepReply: (
+    messages: ChatMessage[],
+    plan: PlanStep[],
+    index: number,
+    urgent: boolean,
+    model: string | null,
+    signal?: AbortSignal,
+  ) =>
+    post<StepReplyResult>(
+      'step-reply',
+      {
+        messages,
+        plan: plan.map((p) => ({
+          title: p.title,
+          instruction: p.instruction ?? '',
+          check: p.check ?? '',
+          result: p.result,
+        })),
+        index,
+        urgent,
+        model,
+      },
+      signal,
+    ),
   handoff: (messages: ChatMessage[], model: string | null, signal?: AbortSignal) =>
     post<HandoffResult>('handoff', { messages, model }, signal),
   /** Проверка скорости ИИ: короткий ответ модели и где она работает. */
@@ -269,7 +299,16 @@ export const serverApi = {
   take: (id: string) => request<Ticket>('POST', `/api/support/tickets/${id}/take`, {}),
   reply: (id: string, text: string) =>
     request<Ticket>('POST', `/api/support/tickets/${id}/reply`, { text }),
-  resolve: (id: string) => request<Ticket>('POST', `/api/support/tickets/${id}/resolve`, {}),
+  // ТЗ v4.22: «Отметить решённым» больше нет — закрывает человек или срок
+  release: (id: string) => request<Ticket>('POST', `/api/support/tickets/${id}/release`, {}),
+  close: (id: string, reason: CloseReason, note: string) =>
+    request<Ticket>('POST', `/api/support/tickets/${id}/close`, { reason, note }),
+  assign: (id: string, specialistId: string | null) =>
+    request<Ticket>('POST', `/api/support/tickets/${id}/assign`, { specialistId }),
+  specialists: () => request<SpecialistRef[]>('GET', '/api/support/specialists'),
+  supportSettings: () => request<SupportTimers>('GET', '/api/support/settings'),
+  saveSupportSettings: (t: Partial<SupportTimers>) =>
+    request<SupportTimers>('PUT', '/api/support/settings', t),
 };
 
 // ——— Мини-форум (ТЗ v4.2, п. 16) ———

@@ -6,7 +6,7 @@ import { SchemeMenu } from '@/components/ui/SchemePicker';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { AiStatusLine } from '@/features/agent/AiStatusLine';
 import { useReviewCount, useReviewPolling } from '@/features/forum/sections';
-import { QUEUES, queuePath, useQueueCounts, type Queue } from '@/features/support/data';
+import { QUEUES, queuePath, queuesFor, useQueueCounts, type Queue } from '@/features/support/data';
 import { useUser } from '@/lib/session';
 import { navItemClass } from './navItem';
 import { DmBadge } from '@/features/dm/DmBadge';
@@ -26,7 +26,8 @@ function activeQueue(pathname: string): Queue | null {
  */
 export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
   const me = useUser();
-  const counts = useQueueCounts(me?.id ?? null);
+  const admin = me?.admin === true;
+  const counts = useQueueCounts({ id: me?.id ?? null, admin });
   useReviewPolling(!!me);
   const review = useReviewCount((s) => s.count);
   const toReview = review.reports + review.proposals;
@@ -42,7 +43,7 @@ export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
       <nav aria-label="Меню специалиста" className="flex min-h-0 flex-1 flex-col gap-1">
         <h2 className="px-3 pb-1 text-xs font-medium text-fg-muted">Пульт поддержки</h2>
         <ul className="flex flex-col gap-0.5">
-          {QUEUES.map(({ id, label, icon: Icon }) => {
+          {queuesFor(admin).map(({ id, label, icon: Icon }) => {
             const isActive = active === id;
             const n = counts[id];
             return (

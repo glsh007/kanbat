@@ -7,5 +7,6 @@ export function statusText(t: Task): string {
   if (t.status === 'awaiting_ai') return 'Помощник отвечает…';
   if (t.status === 'with_support') return 'У специалиста';
   if (t.status === 'scheduled') return 'Запланировано';
-  return t.column === 'done' ? 'Решено' : COLUMN_LABELS[t.column];
+  if (t.column === 'done') return t.selfSolved ? 'Решено самостоятельно' : 'Решено';
+  return COLUMN_LABELS[t.column];
 }

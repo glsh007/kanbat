@@ -190,7 +190,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(
         user.role === 'specialist'
           ? 'Это кабинет специалиста: выберите роль «Специалист» и введите код'
-          : 'Это кабинет сотрудника: выберите роль «Сотрудник»',
+          : 'Это кабинет пользователя: выберите роль «Пользователь»',
       );
     // специалист вводит код специалиста или код администратора (ТЗ v4.12)
     const admin = role === 'specialist' ? this.checkCode(codeRaw, ip) : false;
@@ -292,7 +292,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       createdAt: at,
     });
     console.log(
-      `Регистрация: @${username} (${role === 'specialist' ? 'специалист' : 'сотрудник'})`,
+      `Регистрация: @${username} (${role === 'specialist' ? 'специалист' : 'пользователь'})`,
     );
     const token = randomBytes(24).toString('base64url');
     await this.storage.createSession(token, user.id);

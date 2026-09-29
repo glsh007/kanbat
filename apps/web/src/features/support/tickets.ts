@@ -1,9 +1,9 @@
-import type { Ticket } from '@app/shared';
+import type { CloseReason, SupportTimers, Ticket } from '@app/shared';
 import { create } from 'zustand';
 import { serverApi } from '@/lib/api';
 
 /**
- * Обращения всех сотрудников — для доски специалиста. Опрашиваем сервер раз в несколько секунд.
+ * Обращения всех пользователей — для доски специалиста. Опрашиваем сервер раз в несколько секунд.
  */
 type TicketsState = {
   tickets: Ticket[];
@@ -44,6 +44,7 @@ export function startTicketsPolling(): () => void {
       timer = setTimeout(() => void loop(), document.visibilityState === 'visible' ? 4000 : 20000);
   };
   void loop();
+  void loadSupportTimers();
   return () => {
     stopped = true;
     clearTimeout(timer);
@@ -54,5 +55,20 @@ export function startTicketsPolling(): () => void {
 export const specialist = {
   take: async (id: string) => upsert(await serverApi.take(id)),
   reply: async (id: string, text: string) => upsert(await serverApi.reply(id, text)),
-  resolve: async (id: string) => upsert(await serverApi.resolve(id)),
+  release: async (id: string) => upsert(await serverApi.release(id)),
+  close: async (id: string, reason: CloseReason, note: string) =>
+    upsert(await serverApi.close(id, reason, note)),
+  assign: async (id: string, specialistId: string | null) =>
+    upsert(await serverApi.assign(id, specialistId)),
 };
+
+/** Сроки заявок (ТЗ v4.22) — для подписей «закроется через…»; по умолчанию 24 / 4 ч. */
+export const useSupportTimers = create<SupportTimers>()(() => ({ closeHours: 24, returnHours: 4 }));
+
+export async function loadSupportTimers() {
+  try {
+    useSupportTimers.setState(await serverApi.supportSettings());
+  } catch {
+    /* по умолчанию */
+  }
+}

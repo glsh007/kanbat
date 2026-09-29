@@ -62,6 +62,8 @@ export function SupportPage() {
   const me = useUser();
   const now = useNow();
   const queue: Queue = isQueue(queueParam) ? queueParam : 'all';
+  const admin = me?.admin === true;
+  const viewer = useMemo(() => ({ id: me?.id ?? null, admin }), [me?.id, admin]);
   const close = useCallback(() => navigate(queuePath(queue)), [navigate, queue]);
   const [prefs, setPrefsState] = useState<Prefs>(readPrefs);
   const setPrefs = (p: Partial<Prefs>) =>
@@ -109,6 +111,8 @@ export function SupportPage() {
 
   // неизвестная очередь в адресе — на «Все заявки»
   if (queueParam && !isQueue(queueParam)) return <Navigate to="/support" replace />;
+  // «В работе» и «Ждут пользователя» по всем — у администратора; специалисту — его заявки (v4.22)
+  if (!admin && queueInfo(queue).adminOnly) return <Navigate to="/support/mine" replace />;
 
   const title = queue === 'all' ? 'Пульт поддержки' : queueInfo(queue).label;
   const subtitle = error
@@ -155,7 +159,7 @@ export function SupportPage() {
         <SupportChat
           queue={queue}
           sort={prefs.sort}
-          meId={me?.id ?? null}
+          me={viewer}
           activeId={taskId}
           onClose={close}
         />
@@ -168,7 +172,7 @@ export function SupportPage() {
               onOpen={(id) => navigate(ticketPath(queue, id))}
               queue={queue}
               sort={prefs.sort}
-              meId={me?.id ?? null}
+              me={viewer}
             />
           </div>
           {taskId && <SpecialistPanel key={taskId} taskId={taskId} onClose={close} />}

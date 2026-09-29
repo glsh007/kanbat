@@ -100,10 +100,24 @@ export interface SolutionStep {
   instruction: string;
   /** Короткий вопрос о результате шага: «Почта открылась?» */
   check: string;
-  /** Ответ «продвинулись»: «Да, открылась». */
+  /** Устарело (до v4.21): подписи кнопок «Да / Нет» — теперь пустые, ответ пишет человек. */
   yes: string;
-  /** Ответ «не вышло»: «Нет, не открывается». */
   no: string;
+}
+
+/**
+ * Ответ человека на шаг своими словами (ТЗ v4.21): живая реакция помощника и итог для кода.
+ * done — шаг прошёл, дальше; ask — «сделал», но результат неясен: спросить; failed — не помогло;
+ * other — выяснилось другое; solved — проблема ушла целиком; specialist — дальше только специалист
+ * (или идей больше нет) — помощник ПРЕДЛАГАЕТ передать, но не передаёт сам.
+ */
+export type StepOutcome = 'done' | 'ask' | 'failed' | 'other' | 'solved' | 'specialist';
+export interface StepReplyResult {
+  outcome: StepOutcome;
+  /** 1–3 коротких предложения: услышал → вывод → одно действие или вопрос. */
+  reply: string;
+  /** Новое действие вместо неподошедшего (failed / other); нет — идей больше нет. */
+  step: { title: string; instruction: string; check: string } | null;
 }
 
 export interface StepsResult {

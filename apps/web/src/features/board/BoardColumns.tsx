@@ -1,4 +1,11 @@
-import { COLUMN_LABELS, COLUMNS, isBackwardMove, type ColumnId, type Task } from '@app/shared';
+import {
+  canMoveManually,
+  COLUMN_LABELS,
+  COLUMNS,
+  isBackwardMove,
+  type ColumnId,
+  type Task,
+} from '@app/shared';
 import {
   closestCorners,
   DndContext,
@@ -17,7 +24,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { LayoutGroup } from 'motion/react';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import * as agent from '@/features/agent/agent';
@@ -30,6 +37,9 @@ import { ReworkDialog } from './ReworkDialog';
 import { selectColumn, selectScheduled, useBoard, type BoardSnapshot } from './store';
 import { SectionView } from './sectionView';
 import { TaskCard, type CardActions } from './TaskCard';
+
+const FORWARD_NOTICE =
+  'Вперёд обращение двигает помощник. Если вопрос решился сам — перетащите карточку в «Готово».';
 
 const COLLAPSE_KEY = 'kc-collapsed-columns';
 
@@ -103,6 +113,13 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
   const [fullColumn, setFullColumn] = useState<ColumnId | null>(null);
   const dragOrigin = useRef<{ from: ColumnId; snapshot: BoardSnapshot } | null>(null);
   const stable = useStableColumnWidth();
+  /** Подсказка после запрещённого переноса вперёд (ТЗ v4.23). */
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   const snap = useMemo(() => ({ tasks, order }), [tasks, order]);
   const columns = useMemo(
@@ -133,14 +150,14 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
   const navigate = useNavigate();
 
   /**
-   * Что значит ручной перенос вперёд (карточка уже стоит в новом столбце):
-   * из Черновика — отправить ИИ; в Готово — принять; в Черновик — остановить.
+   * Что значит ручной перенос (карточка уже стоит в новом столбце, ТЗ v4.23): вперёд — только
+   * в «Готово» («решено самостоятельно»); в Черновик — остановить.
    */
   const afterManualMove = useCallback(
     (id: string, from: ColumnId) => {
       const to = store().tasks[id]?.column;
       if (!to || to === from) return;
-      if (to === 'done') return void agent.accept(id);
+      if (to === 'done') return void agent.selfSolve(id);
       if (to === 'draft') {
         agent.stop(id);
         store().placeTask(id, 'draft', 0);
@@ -157,6 +174,7 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
     (id: string, to: ColumnId) => {
       const task = store().tasks[id];
       if (!task || task.column === to) return;
+      if (!canMoveManually(task.column, to)) return setNotice(FORWARD_NOTICE);
       if (isBackwardMove(task.column, to) && to !== 'draft') {
         const snapshot = store().snapshot();
         store().placeTask(id, to, 0, sectionId);
@@ -181,8 +199,6 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
       onRework: () => moveWithRework(task.id, 'working'),
       onRetry: () => void agent.retry(task.id),
       onUnschedule: () => store().unschedule(task.id),
-      onStepDone: () => void agent.stepDone(task.id),
-      onStepFail: () => void agent.notSolved(task.id),
       onSolved: () => void agent.solved(task.id),
       onNotSolved: () => void agent.notSolved(task.id),
     }),
@@ -244,6 +260,12 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
 
     const finalColumn = store().tasks[id]?.column ?? task.column;
     if (finalColumn === origin.from) return;
+    // вперёд двигает помощник — карточка возвращается на место (ТЗ v4.23)
+    if (!canMoveManually(origin.from, finalColumn)) {
+      store().restore(origin.snapshot);
+      setNotice(FORWARD_NOTICE);
+      return;
+    }
     if (isBackwardMove(origin.from, finalColumn) && finalColumn !== 'draft') {
       setPending({ taskId: id, from: origin.from, snapshot: origin.snapshot });
       return;
@@ -269,10 +291,16 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
       over
         ? `Карточка «${title(active.id)}» над столбцом «${where(over.id)}».`
         : 'Карточка вне доски.',
-    onDragEnd: ({ active, over }) =>
-      over
+    onDragEnd: ({ active, over }) => {
+      const from = dragOrigin.current?.from ?? store().tasks[String(active.id)]?.column;
+      const to = over
+        ? (columnFromDropId(String(over.id)) ?? store().tasks[String(over.id)]?.column)
+        : null;
+      if (over && from && to && !canMoveManually(from, to)) return FORWARD_NOTICE;
+      return over
         ? `Карточка «${title(active.id)}» перемещена в «${where(over.id)}».`
-        : 'Перемещение отменено.',
+        : 'Перемещение отменено.';
+    },
     onDragCancel: ({ active }) => `Перемещение карточки «${title(active.id)}» отменено.`,
   };
 
@@ -350,6 +378,19 @@ export function BoardColumns({ sectionId }: { sectionId: string }) {
           document.body,
         )}
       </DndContext>
+
+      {/* подсказка после переноса вперёд (ТЗ v4.23) — сама исчезает через 5 с */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4"
+      >
+        {notice && (
+          <p className="pointer-events-auto max-w-md rounded-card border border-line-strong bg-surface px-4 py-3 text-sm text-fg shadow-raised">
+            {notice}
+          </p>
+        )}
+      </div>
 
       <ReworkDialog
         task={pendingTask}

@@ -4,6 +4,28 @@
  */
 import type { Escalation, Message, UrgentRequest } from './domain';
 
+/** Сроки заявок (ТЗ v4.22): настраивает администратор. */
+export interface SupportTimers {
+  /** Через сколько часов молчания после ответа специалиста заявка закрывается сама. */
+  closeHours: 4 | 24 | 72;
+  /** Через сколько часов без ответа принятая заявка возвращается в общую очередь. */
+  returnHours: 2 | 4 | 8;
+}
+
+export interface TicketReturn {
+  at: string;
+  /** timeout — нет ответа N часов; manual — специалист вернул сам; admin — вернул администратор; reopened — человек возобновил закрытую. */
+  reason: 'timeout' | 'manual' | 'admin' | 'reopened';
+  /** У кого была заявка. */
+  from?: string;
+}
+
+/** Специалист — для «Передать другому» у администратора. */
+export interface SpecialistRef {
+  id: string;
+  name: string;
+}
+
 export type UserRole = 'employee' | 'specialist';
 
 export interface User {
@@ -75,8 +97,12 @@ export interface Ticket {
   escalation: Escalation;
   messages: Message[];
   replies: TicketReply[];
-  /** Какой специалист взял обращение (null — пока никто). */
+  /** Какой специалист принял заявку в работу (null — она в общей очереди). */
   takenBy?: { id: string; name: string } | null;
+  /** Когда принята в работу — от этого считается автовозврат (ТЗ v4.22). */
+  takenAt?: string | null;
+  /** Почему заявка вернулась в общую очередь (ТЗ v4.22). */
+  returned?: TicketReturn | null;
   /** Просьба «Срочно» от человека с причиной (ТЗ v4.16) — только просьба, на очередь не влияет. */
   urgent?: UrgentRequest | null;
   /** Переписка удалена по сроку хранения, осталась сводка (ТЗ v4.16). */

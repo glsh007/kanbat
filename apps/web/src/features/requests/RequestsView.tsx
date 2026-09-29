@@ -197,7 +197,7 @@ function EmptyList({ sectionId }: { sectionId: string }) {
 }
 
 /**
- * Главный экран сотрудника (ТЗ v4.0, п. 3): список обращений и чат.
+ * Главный экран пользователя (ТЗ v4.0, п. 3): список обращений и чат.
  * Путь каждого обращения — полоска из 5 этапов; канбан-доска — по переключателю «Доска».
  */
 export function RequestsView({ sectionId, taskId }: { sectionId: string; taskId?: string }) {

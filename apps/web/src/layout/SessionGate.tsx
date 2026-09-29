@@ -59,7 +59,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
     return startDmPolling();
   }, [token, phase]);
 
-  // пульт специалиста — заявки всех сотрудников
+  // пульт специалиста — заявки всех пользователей
   useEffect(() => {
     if (!token || role !== 'specialist' || phase !== 'ready') return;
     return startTicketsPolling();

@@ -45,10 +45,10 @@ export interface ForumSection {
   activityAt: string | null;
 }
 
-/** proposed — предложил сотрудник, ждёт специалиста; rejected — отклонено; archived — в архиве. */
+/** proposed — предложил пользователь, ждёт специалиста; rejected — отклонено; archived — в архиве. */
 export type CommunityStatus = 'active' | 'proposed' | 'rejected' | 'archived';
 
-/** Предложение сообщества (ТЗ v4.7): сотрудник предлагает, специалист одобряет. */
+/** Предложение сообщества (ТЗ v4.7): пользователь предлагает, специалист одобряет. */
 export interface CommunityProposal {
   id: string;
   slug: string;

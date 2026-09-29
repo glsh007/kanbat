@@ -240,6 +240,39 @@ export class LlmController {
     }
   }
 
+  /** Ответ человека на шаг своими словами (ТЗ v4.21). */
+  @Post('step-reply')
+  @HttpCode(200)
+  async stepReply(
+    @Body()
+    body: { messages?: unknown; plan?: unknown; index?: unknown; urgent?: boolean } & WithModel,
+  ) {
+    const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+    const plan = (Array.isArray(body?.plan) ? body.plan : [])
+      .slice(0, 12)
+      .map((x: Record<string, unknown>) => ({
+        title: str(x?.title, 120),
+        instruction: str(x?.instruction, 400),
+        check: str(x?.check, 160),
+        result: x?.result === 'ok' || x?.result === 'fail' ? x.result : undefined,
+      }))
+      .filter((x) => x.title);
+    if (!plan.length) throw new BadRequestException('Нет плана');
+    const index = Math.max(0, Math.min(plan.length - 1, Number(body?.index) || 0));
+    try {
+      return await this.llm.stepReply(
+        messages(body?.messages),
+        plan,
+        index,
+        !!body?.urgent,
+        body?.model,
+      );
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new BadRequestException(errorMessage(e));
+    }
+  }
+
   @Post('handoff')
   async handoff(@Body() body: { messages?: unknown } & WithModel) {
     try {

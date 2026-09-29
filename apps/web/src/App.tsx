@@ -22,13 +22,13 @@ const DesignPage = lazy(() => import('@/pages/DesignPage'));
 // только для администратора организации — грузится по требованию
 const OrgPage = lazy(() => import('@/pages/OrgPage').then((m) => ({ default: m.OrgPage })));
 
-/** Главная по роли: сотруднику — его обращения, специалисту — пульт поддержки. */
+/** Главная по роли: пользователю — его обращения, специалисту — пульт поддержки. */
 function Home() {
   const specialist = useRole() === 'specialist';
   return <Navigate to={specialist ? '/support' : `/s/${DEFAULT_SECTION_ID}`} replace />;
 }
 
-/** Личные обращения и разделы есть только у сотрудника (ТЗ v4.4, п. 14). */
+/** Личные обращения и разделы есть только у пользователя (ТЗ v4.4, п. 14). */
 function EmployeeOnly({ children }: { children: ReactNode }) {
   return useRole() === 'specialist' ? <Navigate to="/support" replace /> : <>{children}</>;
 }

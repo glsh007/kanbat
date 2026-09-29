@@ -4,7 +4,7 @@ import { useBoard } from '@/features/board/store';
 import { serverApi } from '@/lib/api';
 
 /**
- * Синхронизация обращений к специалисту со стороны сотрудника (ТЗ v3.4, п. 15).
+ * Синхронизация обращений к специалисту со стороны пользователя (ТЗ v3.4, п. 15).
  * - Переданные задачи (сводка, статус и сообщения после передачи) отправляются на сервер — их видит
  *   специалист. Разговор с ИИ до передачи на сервер в обращение не попадает (ТЗ v4.4, п. 14).
  * - Раз в несколько секунд забираем свои обращения: ответы специалиста и статусы.
@@ -80,6 +80,8 @@ async function apply(ticket: Ticket) {
     (srv.rev ?? 0) > (local.rev ?? 0) ||
     ((srv.rev ?? 0) === (local.rev ?? 0) && srv.status !== local.status);
   if (newer) await agent.receiveEscalationStatus(ticket.taskId, srv);
+  // специалист ответил, а человек молчит — один раз напомнить об автозакрытии (ТЗ v4.22)
+  agent.remindClose(ticket.taskId);
 }
 
 async function poll() {

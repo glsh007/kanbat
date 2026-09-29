@@ -13,8 +13,12 @@ type Props = {
   onAnswer: (text: string) => void;
   /** «Пропустить» — только у вопросов уточнения (есть следующий шаг). */
   onSkip?: () => void;
-  /** «Ответить без уточнений» — помощник отвечает с тем, что известно. */
-  onSkipAll: () => void;
+  /** «Ответить без уточнений» — помощник отвечает с тем, что известно (нет — ссылки нет). */
+  onSkipAll?: () => void;
+  /** Пояснение под вопросом, мелко. */
+  note?: string;
+  /** Подсказка в поле «свой ответ». */
+  placeholder?: string;
 };
 
 /**
@@ -30,6 +34,8 @@ export function QuestionDock({
   onAnswer,
   onSkip,
   onSkipAll,
+  note,
+  placeholder,
 }: Props) {
   const [text, setText] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -77,6 +83,7 @@ export function QuestionDock({
         <h3 id={titleId} className="text-[15px] font-medium text-heading">
           {question}
         </h3>
+        {note && <p className="mt-0.5 text-sm text-fg-muted">{note}</p>}
       </div>
 
       {options.length > 0 && (
@@ -129,7 +136,7 @@ export function QuestionDock({
           ref={input}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={options.length ? 'Свой ответ…' : 'Ваш ответ…'}
+          placeholder={placeholder ?? (options.length ? 'Свой ответ…' : 'Ваш ответ…')}
           autoComplete="off"
           className="h-11 min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted"
         />
@@ -143,26 +150,30 @@ export function QuestionDock({
         />
       </form>
 
-      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 px-1 pt-1">
-        {onSkip && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onSkip}
-            className="min-h-9 text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline disabled:opacity-50"
-          >
-            Пропустить вопрос
-          </button>
-        )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onSkipAll}
-          className="min-h-9 text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline disabled:opacity-50"
-        >
-          Ответить без уточнений
-        </button>
-      </div>
+      {(onSkip || onSkipAll) && (
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 px-1 pt-1">
+          {onSkip && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onSkip}
+              className="min-h-9 text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline disabled:opacity-50"
+            >
+              Пропустить вопрос
+            </button>
+          )}
+          {onSkipAll && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onSkipAll}
+              className="min-h-9 text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline disabled:opacity-50"
+            >
+              Ответить без уточнений
+            </button>
+          )}
+        </div>
+      )}
     </motion.section>
   );
 }

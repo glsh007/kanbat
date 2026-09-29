@@ -34,10 +34,10 @@ export type SectionDraft = {
   mode: SectionMode;
 };
 
-/** Роль в демо: сотрудник видит свои обращения, специалист — ещё и доску специалиста. */
+/** Роль в демо: пользователь видит свои обращения, специалист — ещё и доску специалиста. */
 export type Role = 'employee' | 'specialist';
 
-/** Вид экрана сотрудника: список обращений с чатом (по умолчанию) или канбан-доска. */
+/** Вид экрана пользователя: список обращений с чатом (по умолчанию) или канбан-доска. */
 export type ViewMode = 'list' | 'board';
 
 export type Settings = {
@@ -253,7 +253,7 @@ function migrateV3(old: V3) {
   };
 }
 
-/** Текущий вид экрана сотрудника. */
+/** Текущий вид экрана пользователя. */
 export const useViewMode = (): ViewMode => useBoard((s) => s.settings.view ?? 'list');
 
 /** Роль вошедшего пользователя (выдаёт сервер при входе). */
@@ -336,7 +336,11 @@ export const useBoard = create<BoardState>()(
           if (!task) return s;
           return {
             order: reposition(s.order, s.tasks, id, to, index, view),
-            tasks: { ...s.tasks, [id]: { ...task, column: to } },
+            tasks: {
+              ...s.tasks,
+              // вернулось из «Готово» — «Решено самостоятельно» больше не верно (ТЗ v4.23)
+              [id]: { ...task, column: to, ...(to !== 'done' ? { selfSolved: false } : {}) },
+            },
           };
         }),
 

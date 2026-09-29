@@ -193,7 +193,7 @@ export function NewThreadDialog({
             className={cn(fieldClass, 'resize-y py-2 text-sm leading-relaxed')}
           />
           <p className="text-xs text-fg-muted">
-            Не пишите пароли, телефоны и личные данные — тему увидят все сотрудники.
+            Не пишите пароли, телефоны и личные данные — тему увидят все пользователи.
           </p>
         </div>
         {error && (

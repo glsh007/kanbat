@@ -22,7 +22,7 @@ export function UserCard() {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-heading">{user.name}</p>
         <p className="text-xs text-fg-muted">
-          {user.role === 'specialist' ? 'Специалист' : 'Сотрудник'}
+          {user.role === 'specialist' ? 'Специалист' : 'Пользователь'}
         </p>
         {/* показываем только когда есть что сказать: сохраняю / нет связи */}
         <p className="flex items-center gap-1 text-xs text-fg-muted" aria-live="polite">

@@ -19,7 +19,7 @@ export function UrgentMark({
   className?: string;
 }) {
   const hint = forSpecialist
-    ? `Сотрудник просит срочно: «${reason}». Это просьба — очередь она не меняет.`
+    ? `Пользователь просит срочно: «${reason}». Это просьба — очередь она не меняет.`
     : `Вы попросили срочно: «${reason}». ${URGENT_NOTE}`;
   return (
     <span
