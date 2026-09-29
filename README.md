@@ -93,7 +93,7 @@ unzip -o kanbat.zip && cd kanbat && bash deploy/install.sh
 Скрипт ставит Docker (с зеркалами Docker Hub для России), спрашивает домен, каталог и ключ ИИ, собирает и запускает
 Канбат за Caddy с автоматическим HTTPS, проверяет ИИ (`scripts/check-ai.mjs`) и включает ежедневную копию данных.
 Обновление — `deploy/update.sh`, копия — `deploy/backup.sh`. ИИ по умолчанию — **Qwen в Yandex AI Studio**
-(`LLM_PROVIDER=yandex`, `YANDEX_FOLDER_ID`, `LLM_API_KEY`, `LLM_MODEL=qwen3.6-35b-a3b,qwen3-235b-a22b-fp8`);
+(`LLM_PROVIDER=yandex`, `YANDEX_FOLDER_ID`, `LLM_API_KEY`, `LLM_MODEL=qwen3.6-35b-a3b`);
 любой другой OpenAI-совместимый сервис — `LLM_PROVIDER=openai`; своя Ollama (закрытый контур) — сервис `ollama`
 в `docker-compose.yml`. Хранилище спрятано за интерфейсом `Storage` (`apps/api/src/store`): для большой команды
 добавляется PostgreSQL-реализация, остальной код не меняется.

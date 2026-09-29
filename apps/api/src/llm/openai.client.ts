@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { LLM_LIMITS } from '../config';
 import { OllamaError, type OllamaMessage } from './ollama.client';
 import { requestSignal, Watchdog } from './watchdog';
@@ -20,6 +21,9 @@ export type OpenAiOptions = {
 export class OpenAiClient {
   /** Модели, которые не понимают response_format json_schema, — сразу просим json_object. */
   private readonly noSchema = new Set<string>();
+  /** Модели, которые не приняли reasoning_effort: 'none', — больше его не шлём. */
+  private readonly noReasoningOff = new Set<string>();
+  private readonly log = new Logger('LLM');
   readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly fixedModels: string[];
@@ -62,6 +66,8 @@ export class OpenAiClient {
   /**
    * Qwen3 умеет «думать вслух» (<think>): в JSON это лишнее время и риск обрыва.
    * Мягкий переключатель /no_think — как для qwen3 в Ollama; остальные модели его не замечают.
+   * Qwen3.6 в Yandex AI Studio /no_think игнорирует — там рассуждения выключает reasoning_effort
+   * (см. reasoningOff).
    */
   private prepare(model: string, messages: OllamaMessage[]): OllamaMessage[] {
     if (!/qwen3/i.test(model)) return messages;
@@ -105,7 +111,31 @@ export class OpenAiClient {
     return (data.data ?? []).map((m) => m.id).slice(0, 50);
   }
 
+  /**
+   * Yandex AI Studio: рассуждения у Qwen включены по умолчанию (reasoning_content). Они съедают
+   * лимит токенов (JSON обрывается — «Модель вернула не JSON»), время и деньги. Выключаем их
+   * параметром reasoning_effort: 'none'; если модель его не примет (400) — запоминаем и шлём без него.
+   */
+  private reasoningOff(model: string): boolean {
+    return this.yandex && /qwen/i.test(model) && !this.noReasoningOff.has(model);
+  }
+
   private async post(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
+    const model = String(body.model ?? '');
+    if (this.reasoningOff(model)) {
+      try {
+        return await this.send({ ...body, reasoning_effort: 'none' }, signal);
+      } catch (e) {
+        if (!(e instanceof OllamaError) || e.status !== 400 || !/reasoning/i.test(e.message))
+          throw e;
+        this.noReasoningOff.add(model);
+        this.log.warn(`${model}: сервис не принял reasoning_effort=none — шлю без него`);
+      }
+    }
+    return this.send(body, signal);
+  }
+
+  private async send(body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
     const model = String(body.model ?? '');
     let res: Response;
     try {
@@ -168,6 +198,35 @@ export class OpenAiClient {
     schema: object,
     signal: AbortSignal,
   ): Promise<T> {
+    // Первая попытка — обычный лимит; если ответ оборвался на лимите или пришёл пустым —
+    // одна повторная с запасом (модель могла потратить токены на рассуждения).
+    const limits = [LLM_LIMITS.jsonTokens, LLM_LIMITS.jsonTokens * 3];
+    let last = '';
+    for (let attempt = 0; attempt < limits.length; attempt++) {
+      const r = await this.jsonRequest(model, messages, schema, signal, limits[attempt]);
+      const content = r.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      const parsed = parseJson<T>(content);
+      if (parsed !== undefined) return parsed;
+      last = content;
+      const cut = r.finish === 'length' || !content;
+      this.log.warn(
+        `${model}: не JSON (попытка ${attempt + 1}, finish_reason=${r.finish ?? '—'}, ` +
+          `рассуждения ${r.reasoning} симв.): ${content.slice(0, 200) || '«пусто»'}`,
+      );
+      if (!cut) break;
+    }
+    throw new OllamaError(
+      last ? 'Модель вернула не JSON' : 'Модель не успела ответить (пустой ответ)',
+    );
+  }
+
+  private async jsonRequest(
+    model: string,
+    messages: OllamaMessage[],
+    schema: object,
+    signal: AbortSignal,
+    maxTokens: number,
+  ): Promise<{ content: string; finish?: string; reasoning: number }> {
     let res: Response | null = null;
     if (!this.noSchema.has(model))
       try {
@@ -176,7 +235,7 @@ export class OpenAiClient {
             model,
             messages,
             temperature: 0.2,
-            max_tokens: LLM_LIMITS.jsonTokens,
+            max_tokens: maxTokens,
             response_format: {
               type: 'json_schema',
               json_schema: { name: 'result', schema, strict: false },
@@ -194,7 +253,7 @@ export class OpenAiClient {
         {
           model,
           temperature: 0.2,
-          max_tokens: LLM_LIMITS.jsonTokens,
+          max_tokens: maxTokens,
           response_format: { type: 'json_object' },
           messages: [
             {
@@ -207,17 +266,18 @@ export class OpenAiClient {
         signal,
       );
     }
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = (data.choices?.[0]?.message?.content ?? '')
-      .replace(/<think>[\s\S]*?<\/think>/g, '')
-      .trim();
-    try {
-      return JSON.parse(content) as T;
-    } catch {
-      const m = content.match(/\{[\s\S]*\}/);
-      if (m) return JSON.parse(m[0]) as T;
-      throw new OllamaError('Модель вернула не JSON');
-    }
+    const data = (await res.json()) as {
+      choices?: {
+        finish_reason?: string;
+        message?: { content?: string | null; reasoning_content?: string | null };
+      }[];
+    };
+    const choice = data.choices?.[0];
+    return {
+      content: choice?.message?.content ?? '',
+      finish: choice?.finish_reason,
+      reasoning: choice?.message?.reasoning_content?.length ?? 0,
+    };
   }
 
   /** Потоковый ответ (SSE: data: {...}, в конце data: [DONE]). Сроки — как у Ollama. */
@@ -268,11 +328,17 @@ export class OpenAiClient {
         const payload = line.slice(5).trim();
         if (payload === '[DONE]') return;
         const evt = JSON.parse(payload) as {
-          choices?: { delta?: { content?: string } }[];
+          choices?: { delta?: { content?: string | null; reasoning_content?: string | null } }[];
           error?: { message?: string };
         };
         if (evt.error) throw new OllamaError(evt.error.message ?? 'Ошибка сервиса ИИ');
-        const t = evt.choices?.[0]?.delta?.content;
+        const delta = evt.choices?.[0]?.delta;
+        const t = delta?.content;
+        // рассуждения пользователю не показываем, но модель жива — таймер «не начала отвечать» не нужен
+        if (!t && delta?.reasoning_content && Date.now() - armedAt > 1000) {
+          armedAt = Date.now();
+          wd.arm(LLM_LIMITS.idleMs, 'Сервис ИИ замолчал посреди ответа. Попробуйте ещё раз.');
+        }
         if (t) {
           if (Date.now() - armedAt > 1000) {
             armedAt = Date.now();
@@ -287,6 +353,22 @@ export class OpenAiClient {
   /** У облачного сервиса видеокарты не видно. */
   async processor(): Promise<null> {
     return null;
+  }
+}
+
+/** JSON из ответа модели: целиком или первый объект {…} в тексте; undefined — не JSON. */
+function parseJson<T>(content: string): T | undefined {
+  if (!content) return undefined;
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    const m = content.match(/\{[\s\S]*\}/);
+    if (!m) return undefined;
+    try {
+      return JSON.parse(m[0]) as T;
+    } catch {
+      return undefined;
+    }
   }
 }
 

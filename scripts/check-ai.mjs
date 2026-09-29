@@ -61,6 +61,8 @@ for (const model of models) {
         model: uri(model),
         temperature: 0,
         max_tokens: 60,
+        // Qwen в Yandex AI Studio по умолчанию «рассуждает» и /no_think не слушает
+        ...(folder && /qwen/i.test(model) ? { reasoning_effort: 'none' } : {}),
         messages: [
           { role: 'system', content: 'Ответь одним словом по-русски. /no_think' },
           { role: 'user', content: 'Какого цвета небо днём?' },

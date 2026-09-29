@@ -9,7 +9,7 @@ const provider = ((process.env.LLM_PROVIDER ?? 'ollama').trim().toLowerCase() ||
 const models = (
   process.env.LLM_MODEL ??
   process.env.OLLAMA_MODEL ??
-  (provider === 'yandex' ? 'qwen3.6-35b-a3b,qwen3-235b-a22b-fp8' : '')
+  (provider === 'yandex' ? 'qwen3.6-35b-a3b' : '')
 )
   .split(',')
   .map((m) => m.trim())
@@ -50,7 +50,7 @@ export const config = {
   /**
    * Модель по умолчанию: для Ollama — если не выбрана в интерфейсе; для облака — обязательна.
    * Можно несколько через запятую — первая по умолчанию, остальные на выбор в «Настройках».
-   * Для yandex — короткое имя из Yandex AI Studio: qwen3.6-35b-a3b, qwen3-235b-a22b-fp8, yandexgpt-5-lite.
+   * Для yandex — короткое имя из Yandex AI Studio: qwen3.6-35b-a3b, yandexgpt-5-lite (Qwen3 235B отключён Яндексом 30.09.2026).
    */
   llmModel: firstModel,
   llmModels: models,

@@ -92,7 +92,7 @@ ADMIN_CODE=$ADMIN
 LLM_PROVIDER=yandex
 YANDEX_FOLDER_ID=$FOLDER
 LLM_API_KEY=$KEY
-LLM_MODEL=qwen3.6-35b-a3b,qwen3-235b-a22b-fp8
+LLM_MODEL=qwen3.6-35b-a3b
 ENV
   umask 022
   ok "сохранено в $APP_DIR/.env (видно только root)"
