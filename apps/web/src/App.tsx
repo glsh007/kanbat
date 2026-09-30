@@ -6,6 +6,7 @@ import { GENERAL_SECTION_ID as DEFAULT_SECTION_ID } from '@app/shared';
 import { useRole } from '@/features/board/store';
 import { SessionGate } from '@/layout/SessionGate';
 import { AppHistory } from '@/layout/AppHistory';
+import { RouteErrorBoundary } from '@/layout/ErrorBoundary';
 import { SplashScreen } from '@/layout/SplashScreen';
 import { BoardPage } from '@/pages/BoardPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -42,44 +43,46 @@ export function App() {
         <SessionGate>
           <BrowserRouter>
             <AppHistory>
-              <Suspense fallback={<SplashScreen />}>
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route
-                    path="/s/:sectionId"
-                    element={
-                      <EmployeeOnly>
-                        <BoardPage />
-                      </EmployeeOnly>
-                    }
-                  />
-                  <Route
-                    path="/s/:sectionId/t/:taskId"
-                    element={
-                      <EmployeeOnly>
-                        <BoardPage />
-                      </EmployeeOnly>
-                    }
-                  />
-                  <Route path="/forum" element={<ForumPage />} />
-                  <Route path="/forum/review" element={<ReviewPage />} />
-                  <Route path="/forum/s/:sectionId" element={<ForumPage />} />
-                  <Route path="/forum/t/:threadId" element={<ThreadPage />} />
-                  <Route path="/support" element={<SupportPage />} />
-                  <Route path="/support/t/:taskId" element={<SupportPage />} />
-                  <Route path="/support/:queue" element={<SupportPage />} />
-                  <Route path="/support/:queue/t/:taskId" element={<SupportPage />} />
-                  <Route path="/org" element={<OrgPage />} />
-                  <Route path="/messages" element={<MessagesPage />} />
-                  <Route path="/messages/:chatId" element={<MessagesPage />} />
-                  <Route path="/messages/archive/:archiveId" element={<MessagesPage />} />
-                  <Route path="/design" element={<DesignPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-                {/* профиль человека — открывается из имени автора и поиска (ТЗ v4.17) */}
-                <ProfileDialog />
-                <AskDialog />
-              </Suspense>
+              <RouteErrorBoundary>
+                <Suspense fallback={<SplashScreen />}>
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route
+                      path="/s/:sectionId"
+                      element={
+                        <EmployeeOnly>
+                          <BoardPage />
+                        </EmployeeOnly>
+                      }
+                    />
+                    <Route
+                      path="/s/:sectionId/t/:taskId"
+                      element={
+                        <EmployeeOnly>
+                          <BoardPage />
+                        </EmployeeOnly>
+                      }
+                    />
+                    <Route path="/forum" element={<ForumPage />} />
+                    <Route path="/forum/review" element={<ReviewPage />} />
+                    <Route path="/forum/s/:sectionId" element={<ForumPage />} />
+                    <Route path="/forum/t/:threadId" element={<ThreadPage />} />
+                    <Route path="/support" element={<SupportPage />} />
+                    <Route path="/support/t/:taskId" element={<SupportPage />} />
+                    <Route path="/support/:queue" element={<SupportPage />} />
+                    <Route path="/support/:queue/t/:taskId" element={<SupportPage />} />
+                    <Route path="/org" element={<OrgPage />} />
+                    <Route path="/messages" element={<MessagesPage />} />
+                    <Route path="/messages/:chatId" element={<MessagesPage />} />
+                    <Route path="/messages/archive/:archiveId" element={<MessagesPage />} />
+                    <Route path="/design" element={<DesignPage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                  </Routes>
+                  {/* профиль человека — открывается из имени автора и поиска (ТЗ v4.17) */}
+                  <ProfileDialog />
+                  <AskDialog />
+                </Suspense>
+              </RouteErrorBoundary>
             </AppHistory>
           </BrowserRouter>
         </SessionGate>

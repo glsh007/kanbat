@@ -274,10 +274,8 @@ export function TaskCard({
   const view = useSectionView();
   const inReview = task.status === 'awaiting_user' && task.checkpoint === 'review';
   const atPlan = task.status === 'awaiting_user' && task.checkpoint === 'plan';
-  const atStep = task.status === 'awaiting_user' && task.checkpoint === 'step';
   const atOffer = task.status === 'awaiting_user' && task.checkpoint === 'offer';
-  const atQuestions =
-    task.status === 'awaiting_user' && !inReview && !atPlan && !atStep && !atOffer;
+  const atQuestions = task.status === 'awaiting_user' && !inReview && !atPlan && !atOffer;
   // Обращение-проблема (а не вопрос-консультация): проверка звучит как «Закрыть вопрос / Не помогло»
   const problem = isProblemTask(task);
   const questionNo =
@@ -303,16 +301,7 @@ export function TaskCard({
           </Button>
         </div>
       );
-    else if (atStep) {
-      // ответ на шаг — только своими словами (ТЗ v4.23)
-      const step = task.plan?.[task.stepIndex];
-      footer = (
-        <div className="relative z-10 flex flex-col gap-2" data-no-dnd>
-          {step?.check && <p className="text-sm font-medium text-heading">{step.check}</p>}
-          <QuickReply onSend={actions.onAnswer} questions={1} />
-        </div>
-      );
-    } else if (atOffer) {
+    else if (atOffer) {
       // специалист — только с согласия (ТЗ v4.21)
       footer = (
         <div className="relative z-10 flex flex-col gap-2" data-no-dnd>

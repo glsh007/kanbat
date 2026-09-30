@@ -1,4 +1,13 @@
 import type {
+  ErrorReview,
+  AnswerSample,
+  CheckDraft,
+  CheckQuestion,
+  CheckResult,
+  CheckRunInfo,
+  ChecksView,
+  SampleDraft,
+  SampleLimits,
   AnswerOutcome,
   ChatMessage,
   ClassifyResult,
@@ -10,13 +19,18 @@ import type {
   SectionRef,
   SortItem,
   SortResult,
-  StepsResult,
-  StepReplyResult,
-  PlanStep,
   StreamMode,
   Triage,
   Ticket,
   TicketPush,
+  CannedAnswer,
+  CannedDraft,
+  CannedLimits,
+  CannedTest,
+  CannedView,
+  OrgRules,
+  RuleLimits,
+  RulesTest,
   SupportTimers,
   SpecialistRef,
   CloseReason,
@@ -154,38 +168,6 @@ export const api = {
     model: string | null,
     signal?: AbortSignal,
   ) => post<QuestionsResult>('support-questions', { messages, focus, urgent, model }, signal),
-  steps: (
-    messages: ChatMessage[],
-    urgent: boolean,
-    attempt: number,
-    model: string | null,
-    signal?: AbortSignal,
-  ) => post<StepsResult>('steps', { messages, urgent, attempt, model }, signal),
-  /** Ответ человека на шаг своими словами (ТЗ v4.21): реакция и итог. */
-  stepReply: (
-    messages: ChatMessage[],
-    plan: PlanStep[],
-    index: number,
-    urgent: boolean,
-    model: string | null,
-    signal?: AbortSignal,
-  ) =>
-    post<StepReplyResult>(
-      'step-reply',
-      {
-        messages,
-        plan: plan.map((p) => ({
-          title: p.title,
-          instruction: p.instruction ?? '',
-          check: p.check ?? '',
-          result: p.result,
-        })),
-        index,
-        urgent,
-        model,
-      },
-      signal,
-    ),
   handoff: (messages: ChatMessage[], model: string | null, signal?: AbortSignal) =>
     post<HandoffResult>('handoff', { messages, model }, signal),
   /** Проверка скорости ИИ: короткий ответ модели и где она работает. */
@@ -389,6 +371,62 @@ export const orgApi = {
       { profile, question, model },
       signal,
     ),
+};
+
+/** Жёсткие правила организации (ТЗ v4.26). */
+export const rulesApi = {
+  get: () => request<OrgRules & { limits: RuleLimits }>('GET', '/api/rules'),
+  save: (r: Pick<OrgRules, 'rules' | 'forbidden'>) => request<OrgRules>('PUT', '/api/rules', r),
+  /** Проверка черновика (ещё не сохранённых правил) на фразе — без ИИ. */
+  test: (text: string, draft: Pick<OrgRules, 'rules' | 'forbidden'>) =>
+    request<RulesTest>('POST', '/api/rules/test', { text, draft }),
+};
+
+/** Готовые ответы организации (ТЗ v4.25). */
+export const answersApi = {
+  list: () => request<{ answers: CannedAnswer[]; limits: CannedLimits }>('GET', '/api/answers'),
+  create: (d: CannedDraft) => request<CannedAnswer>('POST', '/api/answers', d),
+  update: (id: string, d: CannedDraft) => request<CannedAnswer>('PUT', `/api/answers/${id}`, d),
+  remove: (id: string) => request<{ ok: boolean }>('DELETE', `/api/answers/${id}`),
+  /** «Проверить»: что увидит человек на эту фразу. */
+  test: (text: string, model?: string | null) =>
+    request<CannedTest>('POST', '/api/llm/answers-test', { text, model }),
+  /** Без ИИ: только сильное совпадение слов. */
+  match: (text: string) =>
+    request<{ answer: CannedView | null }>('POST', '/api/answers/match', { text }),
+  feedback: (id: string, helped: boolean) =>
+    request<{ ok: boolean }>('POST', `/api/answers/${id}/feedback`, { helped }),
+};
+
+/** Образцы ответов организации (ТЗ v4.27): только администратор. */
+export const samplesApi = {
+  list: () => request<{ samples: AnswerSample[]; limits: SampleLimits }>('GET', '/api/samples'),
+  create: (d: SampleDraft) => request<AnswerSample>('POST', '/api/samples', d),
+  update: (id: string, d: SampleDraft) => request<AnswerSample>('PUT', `/api/samples/${id}`, d),
+  remove: (id: string) => request<{ ok: boolean }>('DELETE', `/api/samples/${id}`),
+};
+
+/** Проверочные вопросы и прогон на настоящей модели (ТЗ v4.27): только администратор. */
+export const checksApi = {
+  get: () => request<ChecksView>('GET', '/api/checks'),
+  create: (d: CheckDraft) => request<CheckQuestion>('POST', '/api/checks', d),
+  update: (id: string, d: CheckDraft) => request<CheckQuestion>('PUT', `/api/checks/${id}`, d),
+  remove: (id: string) => request<{ ok: boolean }>('DELETE', `/api/checks/${id}`),
+  examples: () => request<{ added: CheckQuestion[] }>('POST', '/api/checks/examples'),
+  run: (ids: string[] | null, model?: string | null) =>
+    request<CheckRunInfo>('POST', '/api/checks/run', { ids, model }),
+  stop: () => request<CheckRunInfo | null>('POST', '/api/checks/stop'),
+  mark: (id: string, mark: 'good' | 'bad' | null) =>
+    request<CheckResult>('POST', `/api/checks/${id}/mark`, { mark }),
+};
+
+/** Разбор ошибок (ТЗ v4.29): прислать — любой (по согласию), разбирать — администратор. */
+export const reviewsApi = {
+  send: (r: { question: string; answer: string; reason: 'not_helped' | 'rework'; note: string }) =>
+    request<{ ok: true }>('POST', '/api/reviews', r),
+  list: () => request<{ reviews: ErrorReview[] }>('GET', '/api/reviews'),
+  resolve: (id: string, outcome: ErrorReview['outcome']) =>
+    request<ErrorReview>('POST', `/api/reviews/${id}/resolve`, { outcome }),
 };
 
 /** Личные сообщения (ТЗ v4.17). */

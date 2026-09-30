@@ -11,6 +11,7 @@ import { useUser } from '@/lib/session';
 import { navItemClass } from './navItem';
 import { DmBadge } from '@/features/dm/DmBadge';
 import { UserCard } from './UserCard';
+import { useBrandWords } from '@/brand/orgBrand';
 
 /** Какая очередь открыта: /support → «Все», /support/new/t/… → «Новые». */
 function activeQueue(pathname: string): Queue | null {
@@ -25,6 +26,8 @@ function activeQueue(pathname: string): Queue | null {
  * Личной доски у специалиста нет — только пульт поддержки.
  */
 export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
+  // названия — реактивно: администратор сменил в «Оформлении» — меню обновится сразу
+  const words = useBrandWords();
   const me = useUser();
   const admin = me?.admin === true;
   const counts = useQueueCounts({ id: me?.id ?? null, admin });
@@ -37,7 +40,7 @@ export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <div className="px-2 pt-1">
-        <Logo variant="full" size={28} />
+        <Logo variant="full" size={28} poweredBy />
       </div>
 
       <nav aria-label="Меню специалиста" className="flex min-h-0 flex-1 flex-col gap-1">
@@ -76,11 +79,11 @@ export function SupportNav({ onNavigate }: { onNavigate?: () => void }) {
         <h2 className="px-3 pt-4 pb-1 text-xs font-medium text-fg-muted">Сообщество</h2>
         <NavLink to="/forum" end className={navItemClass} onClick={onNavigate}>
           <MessagesSquare size={18} aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Бат-Форум</span>
+          <span className="min-w-0 flex-1 truncate">{words.forum}</span>
         </NavLink>
         <NavLink to="/messages" className={navItemClass} onClick={onNavigate}>
           <MessageCircle size={18} aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Бат-общение</span>
+          <span className="min-w-0 flex-1 truncate">{words.dm}</span>
           <DmBadge />
         </NavLink>
         <NavLink to="/forum/review" className={navItemClass} onClick={onNavigate}>

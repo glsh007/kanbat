@@ -1,4 +1,6 @@
+import { brandWords } from '@/brand/orgBrand';
 import type { ForumDraft, ForumReplyView, ForumThreadPage } from '@app/shared';
+import { isSendKey, SEND_HINT } from '@/lib/keys';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -17,7 +19,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Menu, type MenuItem } from '@/components/ui/Menu';
 import { CommunityIcon } from '@/features/forum/community';
-import { FORUM_NAME, handle } from '@/features/forum/sections';
+import { handle } from '@/features/forum/sections';
 import { ForumLayout } from '@/features/forum/ForumLayout';
 import { NewThreadDialog } from '@/features/forum/NewThreadDialog';
 import { AskButton, Author, ShareLink, ThreadFlags, VoteButton } from '@/features/forum/parts';
@@ -105,7 +107,7 @@ export function ThreadPage() {
 
   const shell = (children: React.ReactNode) => (
     <AppShell
-      title={FORUM_NAME}
+      title={brandWords().forum}
       subtitle={section ? `${handle(section)} · ${section.name}` : undefined}
     >
       <ForumLayout sectionId={t?.sectionId} onCreate={createHere}>
@@ -306,13 +308,16 @@ export function ThreadPage() {
             maxLength={4000}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void send();
+              if (isSendKey(e)) {
+                e.preventDefault();
+                void send();
+              }
             }}
             placeholder="Добавьте ответ: что помогло вам, где нажать, на что обратить внимание"
             className="w-full resize-y bg-transparent text-[15px] leading-relaxed text-fg outline-none placeholder:text-fg-muted focus-visible:outline-none"
           />
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-fg-muted">Ctrl+Enter — отправить</p>
+            <p className="text-xs text-fg-muted">{SEND_HINT}</p>
             <Button
               type="submit"
               size="sm"

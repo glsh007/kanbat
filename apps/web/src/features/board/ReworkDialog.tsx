@@ -1,4 +1,5 @@
 import { COLUMN_LABELS, type ColumnId, type Task } from '@app/shared';
+import { isSendKey } from '@/lib/keys';
 import { useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
@@ -65,7 +66,10 @@ export function ReworkDialog({ task, from, to, onConfirm, onCancel }: Props) {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit();
+            if (isSendKey(e)) {
+              e.preventDefault();
+              submit();
+            }
           }}
           placeholder="Например: сделай короче и добавь пример"
           className={cn(fieldClass, 'resize-none py-2 text-sm leading-relaxed')}

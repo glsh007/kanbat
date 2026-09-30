@@ -1,3 +1,4 @@
+import type { CannedView, RuleAction } from './org';
 /**
  * Контракт API /api/llm/* (зеркало — apps/api/src/llm/types.ts).
  */
@@ -77,6 +78,13 @@ export interface AnswerOutcome {
 }
 
 /** Разбор обращения: «Что произошло, насколько срочно и что нужно сделать». */
+/**
+ * Путь обращения после разбора (ТЗ v4.27): describe — обращения нет, живой ответ; canned — готовый
+ * ответ организации; clarify — уточняющие вопросы; specialist — предложение передать специалисту;
+ * answer — ответ ИИ. Выбирает сервер — одно правило и для обращений, и для проверочных вопросов.
+ */
+export type TriageRoute = 'describe' | 'canned' | 'clarify' | 'specialist' | 'answer';
+
 export interface Triage {
   /** false — текст не описывает проблему («F», «тест», набор символов): ничего не придумываем, просим описать. */
   meaningful: boolean;
@@ -93,6 +101,16 @@ export interface Triage {
   difficulty: TaskDifficulty;
   title: string;
   estimated_seconds: number;
+  /** Готовый ответ организации, подошедший по смыслу (ТЗ v4.25); нет — null. */
+  canned?: CannedView | null;
+  /** Какие жёсткие правила организации сработали (ТЗ v4.26). */
+  rules?: { action: RuleAction; phrase: string }[];
+  /** Пояснение администратора для «Сразу к специалисту». */
+  rule_note?: string;
+  /** Что помощник сделает дальше — выбирает сервер (ТЗ v4.27). */
+  route?: TriageRoute;
+  /** Реплика с предложением передать специалисту. */
+  offer?: string;
 }
 
 export interface SolutionStep {
@@ -111,21 +129,6 @@ export interface SolutionStep {
  * other — выяснилось другое; solved — проблема ушла целиком; specialist — дальше только специалист
  * (или идей больше нет) — помощник ПРЕДЛАГАЕТ передать, но не передаёт сам.
  */
-export type StepOutcome = 'done' | 'ask' | 'failed' | 'other' | 'solved' | 'specialist';
-export interface StepReplyResult {
-  outcome: StepOutcome;
-  /** 1–3 коротких предложения: услышал → вывод → одно действие или вопрос. */
-  reply: string;
-  /** Новое действие вместо неподошедшего (failed / other); нет — идей больше нет. */
-  step: { title: string; instruction: string; check: string } | null;
-}
-
-export interface StepsResult {
-  intro: string;
-  steps: SolutionStep[];
-  self_solvable: boolean;
-  escalate_reason: string;
-}
 
 /** Часть сводки для специалиста, которую формулирует модель. */
 export interface HandoffResult {

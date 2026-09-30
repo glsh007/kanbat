@@ -1,6 +1,8 @@
 import { PII_LABELS, type Message, type Task, type Triage } from '@app/shared';
 import {
   AlertCircle,
+  Building2,
+  ExternalLink,
   BookOpen,
   Check,
   Copy,
@@ -19,6 +21,7 @@ import { faqById } from '@/features/faq/faq';
 import { SimilarThreads } from '@/features/forum/SimilarThreads';
 import { Logo } from '@/brand/Logo';
 import { Markdown } from './Markdown';
+import * as agent from '@/features/agent/agent';
 
 type Props = {
   task: Task;
@@ -37,6 +40,15 @@ type Props = {
   /** ИИ долго думает: передать специалисту сразу, без сводки от ИИ. */
   onQuickEscalate?: () => void;
 };
+
+/** Адрес ссылки без «https://» и пути — чтобы было видно, куда ведёт кнопка. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
 
 /** «Что произошло» — разбор обращения (ТЗ v2, п. 13.2). */
 function TriageCard({ t }: { t: Triage }) {
@@ -71,7 +83,7 @@ function TriageCard({ t }: { t: Triage }) {
                 .join('; ')
                 .toLowerCase()}`
             : t.mode === 'escalate'
-              ? 'Передам специалисту'
+              ? 'Предложу передать специалисту'
               : t.mode === 'answer'
                 ? 'Отвечу сразу'
                 : t.mode === 'request'
@@ -79,6 +91,58 @@ function TriageCard({ t }: { t: Triage }) {
                   : 'Данных достаточно — сразу к решению'}
         </dd>
       </dl>
+    </div>
+  );
+}
+
+/**
+ * Разбор ошибок (ТЗ v4.29): показать администратору ответ, который не помог. Только по нажатию;
+ * уходят вопрос и этот ответ — остальная переписка остаётся у человека.
+ */
+function ReviewOffer({
+  taskId,
+  messageId,
+  sent,
+}: {
+  taskId: string;
+  messageId: string;
+  sent: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (sent)
+    return (
+      <p className="flex items-center gap-2 text-sm text-fg-muted" role="status">
+        <Check size={16} aria-hidden className="shrink-0" />
+        Показали администратору — спасибо, это поможет помощнику отвечать лучше.
+      </p>
+    );
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-muted">
+      <span className="min-w-0 flex-1 basis-60">
+        Ответ не помог? Можно показать его администратору — он научит помощника. Уйдут только ваш
+        вопрос и этот ответ.
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          agent
+            .sendReview(taskId, messageId)
+            .catch((e: Error) => setError(e.message))
+            .finally(() => setBusy(false));
+        }}
+        className="min-h-9 rounded-control border border-line-strong px-3 text-sm text-fg hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50"
+      >
+        {busy ? 'Отправляю…' : 'Показать администратору'}
+      </button>
+      {error && (
+        <span role="alert" className="basis-full font-medium text-heading">
+          {error}
+        </span>
+      )}
     </div>
   );
 }
@@ -239,7 +303,6 @@ export function MessageList({
   const lastFaq = [...messages].reverse().find((m) => m.kind === 'faq');
   const lastQuestions = [...messages].reverse().find((m) => m.kind === 'questions');
   const lastPlan = [...messages].reverse().find((m) => m.kind === 'plan');
-  const lastSteps = [...messages].reverse().find((m) => m.kind === 'steps');
   const lastText = [...messages]
     .reverse()
     .find((m) => m.role === 'assistant' && (m.kind ?? 'text') === 'text');
@@ -290,6 +353,13 @@ export function MessageList({
             </li>
           );
 
+        if (m.kind === 'review' && m.review)
+          return (
+            <li key={m.id}>
+              <ReviewOffer taskId={task.id} messageId={m.id} sent={m.review.sent} />
+            </li>
+          );
+
         if (m.kind === 'hint')
           return (
             <li key={m.id} className="flex items-start gap-2 text-sm text-fg-muted">
@@ -298,103 +368,55 @@ export function MessageList({
             </li>
           );
 
-        if (m.kind === 'steps' && m.steps) {
-          const active = m === lastSteps;
-          // один шаг — простым текстом, как сказал бы человек (ТЗ v4.21)
-          if (m.steps.length === 1) {
-            const st = m.steps[0]!;
-            return (
-              <li key={m.id} className="flex flex-col gap-1">
-                <Markdown
-                  text={[m.content, `**${st.title}.** ${st.instruction}`, st.check]
-                    .filter(Boolean)
-                    .join('\n\n')}
-                />
-              </li>
-            );
-          }
-          // несколько — компактный чек-лист: пройденные свёрнуты, текущий раскрыт, будущие — серые
-          const steps = active && task.plan?.length ? task.plan : m.steps;
-          const current = active && task.checkpoint === 'step' ? task.stepIndex : -1;
+        // готовый ответ организации (ТЗ v4.25): дословно, со ссылками — и видно, что это не ИИ
+        if (m.kind === 'org' && m.org)
           return (
-            <li key={m.id} className="flex flex-col gap-3">
-              <p>{m.content}</p>
-              <ol className="flex flex-col gap-1" aria-label="Шаги решения">
-                {steps.map((st, i) => {
-                  const res = 'result' in st ? st.result : undefined;
-                  const isCurrent = i === current;
-                  return (
-                    <li
-                      key={i}
-                      aria-current={isCurrent ? 'step' : undefined}
-                      className={cn(
-                        'flex items-start gap-2.5 rounded-card px-3',
-                        isCurrent
-                          ? 'my-1 border border-accent bg-surface py-3 shadow-card'
-                          : 'py-1.5',
-                        !isCurrent && !res && 'text-fg-muted',
-                      )}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium',
-                          res === 'ok'
-                            ? 'bg-primary text-on-primary'
-                            : res === 'fail'
-                              ? 'border border-line-strong text-fg-muted'
-                              : isCurrent
-                                ? 'border border-accent text-heading'
-                                : 'border border-line text-fg-muted',
-                        )}
+            <li key={m.id} className="flex flex-col gap-2">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+                <Building2 size={14} aria-hidden />
+                Ответ организации · {m.org.title}
+              </p>
+              <div className="rounded-card border border-line-strong bg-surface px-4 py-3">
+                <Markdown text={m.content} />
+              </div>
+              {m.org.links.length > 0 && (
+                <ul className="flex flex-wrap gap-2" aria-label="Ссылки">
+                  {m.org.links.map((l) => (
+                    <li key={l.url + l.label}>
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-surface px-3 text-sm font-medium text-heading transition-colors duration-200 hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                       >
-                        {res === 'ok' ? (
-                          <Check size={12} />
-                        ) : res === 'fail' ? (
-                          <X size={12} />
-                        ) : (
-                          i + 1
-                        )}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={cn(
-                            isCurrent ? 'font-medium text-heading' : 'text-[15px]',
-                            res === 'fail' && 'text-fg-muted line-through decoration-line-strong',
-                            res === 'ok' && 'text-fg-muted',
-                          )}
-                        >
-                          {st.title}
-                          {res && (
-                            <span className="sr-only">
-                              {res === 'ok' ? ' — сделано' : ' — не подошло'}
-                            </span>
-                          )}
-                        </p>
-                        {res === 'fail' && (
-                          <p aria-hidden className="text-xs text-fg-muted">
-                            не подошло
-                          </p>
-                        )}
-                        {isCurrent && st.instruction && (
-                          <p className="mt-1 text-sm text-fg">{st.instruction}</p>
-                        )}
-                        {isCurrent && st.check && (
-                          <p className="mt-2 text-sm font-medium text-heading">{st.check}</p>
-                        )}
-                      </div>
+                        {l.label}
+                        <span className="text-xs font-normal text-fg-muted">{hostOf(l.url)}</span>
+                        <ExternalLink size={14} aria-hidden />
+                        <span className="sr-only"> (откроется в новой вкладке)</span>
+                      </a>
                     </li>
-                  );
-                })}
-              </ol>
-              {current >= 0 && (
-                <p className="text-sm text-fg-muted">
-                  Расскажите внизу своими словами, как прошёл шаг.
-                </p>
+                  ))}
+                </ul>
               )}
             </li>
           );
-        }
+
+        // шаги из версий с пошаговыми окнами (до v4.24) — теперь просто текст одним сообщением
+        if (m.kind === 'steps' && m.steps)
+          return (
+            <li key={m.id} className="flex flex-col gap-1">
+              <Markdown
+                text={[
+                  m.content,
+                  m.steps
+                    .map((st, i) => `${i + 1}. **${st.title}.** ${st.instruction}`.trim())
+                    .join('\n'),
+                ]
+                  .filter(Boolean)
+                  .join('\n\n')}
+              />
+            </li>
+          );
 
         if (m.kind === 'handoff' && m.handoff)
           return (
@@ -568,7 +590,6 @@ export function MessageList({
           !live &&
           !m.canned &&
           !m.reaction &&
-          task.checkpoint !== 'step' &&
           task.checkpoint !== 'offer';
         return (
           <li key={m.id} className="flex flex-col gap-1">

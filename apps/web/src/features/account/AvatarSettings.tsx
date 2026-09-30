@@ -7,6 +7,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/lib/cn';
 import { saveAvatar } from '@/lib/session';
+import { brandWords } from '@/brand/orgBrand';
 
 /** Готовые рисунки — летучие мыши в цветах схем (сервер рисует их сам, ТЗ v4.18). */
 const PRESETS = [
@@ -109,7 +110,8 @@ export function AvatarSettings({ user }: { user: User }) {
         />
       </div>
       <p id={groupId} className="text-xs text-fg-muted">
-        Или выберите рисунок. Аватарку видят все в Канбате: на Бат-Форуме и в Бат-общении.
+        Или выберите рисунок. Аватарку видят все в Канбате: на {brandWords().forumPrep} и в{' '}
+        {brandWords().dmPrep}.
       </p>
       <div role="radiogroup" aria-labelledby={groupId} className="flex flex-wrap gap-2">
         {PRESETS.map((p) => (

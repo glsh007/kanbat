@@ -23,7 +23,7 @@ type Props = {
 
 /**
  * Панель ответа на вопрос помощника — внизу, на месте поля ввода (ТЗ v4.14, как в Claude):
- * вопрос, пронумерованные варианты (клавиши 1–4), последним пунктом — «Свой ответ» с полем ввода,
+ * вопрос, пронумерованные варианты (клавиши 1–4; в пустом поле «свой ответ» — тоже), последним пунктом — «Свой ответ» с полем ввода,
  * чтобы сразу было видно: можно ответить своими словами. Ниже — «Пропустить» и «Ответить без уточнений».
  */
 export function QuestionDock({
@@ -136,6 +136,15 @@ export function QuestionDock({
           ref={input}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            // поле пустое — цифра выбирает вариант (ТЗ v4.28); начали писать — цифры печатаются,
+            // Enter отправляет свой ответ
+            const n = Number(e.key);
+            if (!text && n >= 1 && n <= options.length && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              send(options[n - 1]!);
+            }
+          }}
           placeholder={placeholder ?? (options.length ? 'Свой ответ…' : 'Ваш ответ…')}
           autoComplete="off"
           className="h-11 min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-muted"

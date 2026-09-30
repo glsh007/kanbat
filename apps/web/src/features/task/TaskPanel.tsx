@@ -47,7 +47,6 @@ function placeholderFor(checkpoint: string | null, column: ColumnId, withSupport
   if (withSupport) return 'Написать специалисту — он увидит это сообщение…';
   if (checkpoint === 'faq') return 'Опишите подробнее — подберу похожие вопросы…';
   if (checkpoint === 'describe') return 'Напишите, что случилось или с чем помочь…';
-  if (checkpoint === 'step') return 'Опишите, что получилось или что пошло не так…';
   if (checkpoint === 'questions') return 'Ваш ответ на вопрос…';
   if (checkpoint === 'ask') return 'Ответьте своими словами…';
   if (checkpoint === 'plan') return 'Напишите «да» или что изменить в плане…';
@@ -153,8 +152,6 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
   const qs = waiting && task.checkpoint === 'questions' ? (task.questions ?? []) : [];
   const qIndex = qs.length - task.pendingQuestions;
   const currentQ = qs[qIndex];
-  const step = waiting && task.checkpoint === 'step' ? task.plan?.[task.stepIndex] : undefined;
-  const total = task.plan?.length ?? 0;
   const dock: DockState | null = currentQ
     ? {
         counter: qs.length > 1 ? `Вопрос ${qIndex + 1} из ${qs.length}` : null,
@@ -173,29 +170,18 @@ export function TaskPanel({ taskId, onClose, layout = 'side' }: Props) {
           skipAll: !!task.replyOptions?.length,
           placeholder: task.replyOptions?.length ? undefined : 'Ответ своими словами…',
         }
-      : step
+      : waiting && task.checkpoint === 'offer'
         ? {
-            // ответ на шаг — только своими словами, без быстрых ответов (ТЗ v4.23)
-            counter:
-              total > 1 ? `Шаг ${task.stepIndex + 1} из ${total} · ${step.title}` : step.title,
-            question: step.check || 'Как прошёл шаг?',
-            options: [],
+            // специалист — только с согласия (ТЗ v4.21)
+            counter: null,
+            question: 'Передать обращение специалисту?',
+            note: 'Он получит короткую сводку — пересказывать ничего не придётся.',
+            options: ['Передать специалисту', task.offer?.continueLabel || 'Продолжить с ИИ'],
             skip: false,
             skipAll: false,
-            placeholder: 'Ответ своими словами…',
+            placeholder: 'Или напишите, что думаете…',
           }
-        : waiting && task.checkpoint === 'offer'
-          ? {
-              // специалист — только с согласия (ТЗ v4.21)
-              counter: null,
-              question: 'Передать обращение специалисту?',
-              note: 'Он получит короткую сводку — пересказывать ничего не придётся.',
-              options: ['Передать специалисту', task.offer?.continueLabel || 'Продолжить с ИИ'],
-              skip: false,
-              skipAll: false,
-              placeholder: 'Или напишите, что думаете…',
-            }
-          : null;
+        : null;
   const withSupport = task.status === 'with_support';
   // Обращение-проблема: проверка — «Закрыть вопрос / Не помогло» (ТЗ v4.23)
   const problem = isProblemTask(task);

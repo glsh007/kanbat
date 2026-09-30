@@ -1,4 +1,5 @@
 import { ArrowUp, Square } from 'lucide-react';
+import { isSendKey } from '@/lib/keys';
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { cn } from '@/lib/cn';
@@ -58,7 +59,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         disabled={disabled}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (isSendKey(e)) {
             e.preventDefault();
             send();
           }

@@ -1,3 +1,4 @@
+import { brandWords } from '@/brand/orgBrand';
 import type { CommunityDraft, CommunityProposal, ForumSection } from '@app/shared';
 import { Archive, MoreHorizontal, Pencil, Plus, ScrollText, ShieldCheck } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -14,7 +15,7 @@ import { useNow } from '@/lib/useNow';
 import { CommunityDialog, type CommunityDialogMode } from './CommunityDialog';
 import { CommunityIcon } from './community';
 import { ForumFlash } from './parts';
-import { FORUM_NAME, handle, useForumFlash, useReviewCount } from './sections';
+import { handle, useForumFlash, useReviewCount } from './sections';
 import { useForumSections } from './sections';
 
 const RULES = [
@@ -89,7 +90,7 @@ function CommunityInfo({
   return (
     <div className="flex flex-col gap-3">
       <section
-        aria-label={section ? `О сообществе ${handle(section)}` : `О ${FORUM_NAME}е`}
+        aria-label={section ? `О сообществе ${handle(section)}` : `О ${brandWords().forumPrep}`}
         className="overflow-hidden rounded-panel border border-line bg-surface"
       >
         {/* «баннер» сообщества — мягкая полоса, как шапка сообщества на Reddit */}
@@ -110,7 +111,7 @@ function CommunityInfo({
           </div>
           <div>
             <h2 className="font-serif text-lg leading-tight font-medium">
-              {section ? section.name : FORUM_NAME}
+              {section ? section.name : brandWords().forum}
             </h2>
             <p className="text-sm text-fg-muted">{section ? handle(section) : 'б/все'}</p>
           </div>
@@ -294,7 +295,7 @@ function CompactHeader({
         <CommunityIcon icon={section?.icon} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-serif text-base font-medium text-heading">
-            {section ? section.name : FORUM_NAME}
+            {section ? section.name : brandWords().forum}
           </p>
           <p className="truncate text-xs text-fg-muted">
             {(() => {

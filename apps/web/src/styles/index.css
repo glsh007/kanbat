@@ -310,3 +310,34 @@
     color: var(--heading);
   }
 }
+
+/* ——— Оформление организации (ТЗ v4.28) ——— */
+@keyframes org-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.88);
+  }
+}
+@layer components {
+  /* свой значок «думает» только так: медленно сужается и расширяется */
+  .org-breathe {
+    transform-origin: center;
+    animation: org-breathe 3.2s ease-in-out infinite;
+  }
+  /* в тёмной теме под логотипом и значком организации — светлая подложка: тёмный логотип не пропадёт */
+  .org-plate {
+    border-radius: 6px;
+  }
+  [data-theme='dark'] .org-plate {
+    background: var(--cream);
+    padding: 2px 6px;
+  }
+  [data-theme='dark'] .org-plate-mark {
+    background: var(--cream);
+    border-radius: 25%;
+    padding: 2px;
+  }
+}

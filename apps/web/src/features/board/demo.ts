@@ -94,34 +94,14 @@ const urgentTriage = triage({
   urgency_reason: 'Встреча через 20 минут — работа заблокирована.',
   mode: 'steps',
 });
-const urgentSteps: {
-  title: string;
-  instruction: string;
-  check: string;
-  yes: string;
-  no: string;
-}[] = (
-  [
-    {
-      title: 'Подключиться к встрече с телефона',
-      instruction:
-        'Раз с телефона система открывается — используйте его, чтобы успеть на встречу. Причину разберём после.',
-      check: 'Подключились к встрече?',
-    },
-    {
-      title: 'Проверить VPN на ноутбуке',
-      instruction:
-        'Значок VPN в правом нижнем углу должен быть зелёным. Если серый — нажмите на него и выберите «Подключить».',
-      check: 'Значок VPN стал зелёным?',
-    },
-    {
-      title: 'Открыть систему в режиме инкогнито',
-      instruction:
-        'Нажмите Ctrl+Shift+N в браузере и войдите ещё раз — так исключим проблему с сохранёнными данными.',
-      check: 'Получилось войти?',
-    },
-  ] as { title: string; instruction: string; check: string }[]
-).map((s) => ({ ...s, yes: '', no: '' }));
+/** Срочное: ответ одним сообщением со списком действий (ТЗ v4.24 — без пошаговых окон). */
+const urgentAnswer = `Сначала — быстрый обходной путь, чтобы вы успели на встречу, потом разберёмся с причиной.
+
+1. **Подключитесь к встрече с телефона** — раз с телефона система открывается, этого хватит, чтобы успеть.
+2. **Проверьте VPN на ноутбуке** — значок в правом нижнем углу должен быть зелёным. Если серый — нажмите на него и выберите «Подключить».
+3. **Откройте систему в режиме инкогнито** (Ctrl+Shift+N) и войдите ещё раз — так исключим сохранённые данные браузера.
+
+Напишите, если что-то не получится или на каком шаге застряли.`;
 
 // ——— Передано специалисту ———
 const accessEscalation: Escalation = {
@@ -232,30 +212,18 @@ const general: Seed[] = [
     status: 'awaiting_user',
     urgency: 'critical',
     triage: urgentTriage,
-    checkpoint: 'step',
-    attempts: 1,
-    stepIndex: 1,
+    checkpoint: 'ask',
+    askText: 'Получилось войти с ноутбука?',
     pendingQuestions: 1,
-    plan: urgentSteps.map((s, i) => ({
-      ...s,
-      done: i === 0,
-      result: i === 0 ? ('ok' as const) : undefined,
-      answer: i === 0 ? 'Да, с телефона подключился, я на встрече' : undefined,
-    })),
-    preview: `Шаг 2 из 3: ${urgentSteps[1]!.title}`,
+    preview: 'Получилось войти с ноутбука?',
     chat: [
       { role: 'assistant', kind: 'triage', content: urgentTriage.summary, triage: urgentTriage },
+      { role: 'assistant', content: urgentAnswer },
+      { role: 'user', content: 'С телефона подключился, я на встрече. VPN зелёный' },
       {
         role: 'assistant',
-        kind: 'steps',
         content:
-          'Сначала — быстрый обходной путь, чтобы вы успели на встречу, потом разберёмся с причиной.',
-        steps: urgentSteps,
-      },
-      { role: 'user', content: 'Да, с телефона подключился, я на встрече' },
-      {
-        role: 'assistant',
-        content: `Отлично, встреча не сорвётся. Теперь разберёмся с ноутбуком.\n\n**Шаг 2 из 3. ${urgentSteps[1]!.title}.** ${urgentSteps[1]!.instruction}`,
+          'Отлично, встреча не сорвётся. Раз VPN в порядке, осталось попробовать режим инкогнито (Ctrl+Shift+N). Получилось войти с ноутбука?',
       },
     ],
   },

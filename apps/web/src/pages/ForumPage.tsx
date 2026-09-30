@@ -1,10 +1,11 @@
+import { brandWords } from '@/brand/orgBrand';
 import type { ForumDraft, ForumSection, ForumSort, ForumThreadView } from '@app/shared';
 import { Flame, MessagesSquare, Plus, Search, Sparkles, Trophy, Clock, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { useRole } from '@/features/board/store';
-import { FORUM_NAME, handle } from '@/features/forum/sections';
+import { handle } from '@/features/forum/sections';
 import { ForumLayout } from '@/features/forum/ForumLayout';
 import { NewThreadDialog } from '@/features/forum/NewThreadDialog';
 import { PostCard } from '@/features/forum/parts';
@@ -44,7 +45,7 @@ export function ForumPage() {
 
   const q = query.trim();
   const section = sections.find((s) => s.id === sectionId);
-  useNavTitle(section ? `Бат-Форум, ${handle(section)}` : 'Бат-Форум');
+  useNavTitle(section ? `${brandWords().forum}, ${handle(section)}` : brandWords().forum);
   // поиск в сообществе — по нему; «искать везде» — по всему форуму
   const scope = q && everywhere ? undefined : sectionId;
 
@@ -90,7 +91,7 @@ export function ForumPage() {
 
   return (
     <AppShell
-      title={FORUM_NAME}
+      title={brandWords().forum}
       subtitle={
         section ? `${handle(section)} · ${section.name}` : 'Похожие проблемы и ответы коллег'
       }
@@ -104,7 +105,7 @@ export function ForumPage() {
             className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-fg-muted"
           />
           <label htmlFor="forum-search" className="sr-only">
-            Поиск по {FORUM_NAME}у
+            Поиск по {brandWords().forumDat}
           </label>
           <input
             ref={searchRef}
@@ -115,7 +116,9 @@ export function ForumPage() {
             onKeyDown={(e) => {
               if (e.key === 'Escape') setQuery('');
             }}
-            placeholder={section ? `Искать в ${handle(section)}` : `Искать на ${FORUM_NAME}е`}
+            placeholder={
+              section ? `Искать в ${handle(section)}` : `Искать на ${brandWords().forumPrep}`
+            }
             className={cn(
               'h-12 w-full rounded-full border border-line bg-surface pr-11 pl-11 text-[15px] text-fg shadow-card',
               'transition-[border-color,box-shadow] duration-200 placeholder:text-fg-muted',

@@ -1,5 +1,6 @@
 import type { PiiKind } from './privacy';
 import type { Question, SolutionStep, Triage, Urgency } from './llm';
+import type { CannedView } from './org';
 
 /**
  * Доменная модель (ТЗ, п. 2, 3, 5, 6, 11). Общая для фронтенда и бэкенда.
@@ -292,6 +293,10 @@ export interface Task {
   hintShown?: boolean;
   /** Напоминание об автозакрытии уже показано — для этого срока `closeAt` (ТЗ v4.22). */
   closeReminded?: string | null;
+  /** Показан готовый ответ организации (ТЗ v4.25) — проверка «Закрыть вопрос / Не помогло». */
+  orgAnswerId?: string | null;
+  /** Отзыв «Не помогло» о готовом ответе уже отправлен. */
+  orgFeedback?: boolean;
   /** На каком шаге помощник уже переспросил результат — второй раз не переспрашивает (ТЗ v4.23). */
   askedStep?: number | null;
   /** Пользователь сам перенёс обращение в «Готово» — «Решено самостоятельно» (ТЗ v4.23). Снимается при возобновлении. */
@@ -328,7 +333,11 @@ export type MessageKind =
   /** ИИ недоступен: выбор из частых вопросов (id тем в `faq`). */
   | 'faq'
   /** Короткая подсказка без «пузыря»: «Специалист всегда рядом…» (ТЗ v4.21). */
-  | 'hint';
+  | 'hint'
+  /** Готовый ответ организации — дословно, со ссылками (ТЗ v4.25). */
+  | 'org'
+  /** «Показать администратору» ответ, который не помог (ТЗ v4.29) — только с согласия человека. */
+  | 'review';
 
 export interface Message {
   id: string;
@@ -349,6 +358,17 @@ export interface Message {
   canned?: boolean;
   /** Реакция помощника на ответ по шагу (ТЗ v4.21) — не «перегенерировать»: это часть шагов. */
   reaction?: boolean;
+  /** Готовый ответ организации (kind 'org', ТЗ v4.25). */
+  org?: CannedView;
+  /** Предложение отправить ответ на разбор (kind 'review', ТЗ v4.29). */
+  review?: {
+    answerId: string;
+    question: string;
+    answer: string;
+    reason: 'not_helped' | 'rework';
+    note: string;
+    sent: boolean;
+  };
   /** Что скрыто в сообщении человека (ТЗ v4.16): СНИЛС, паспорт, карта — показываем пометку. */
   masked?: PiiKind[];
   /** Отчёт пользователя о шаге решения. */
@@ -373,9 +393,11 @@ export interface SectionMemory {
  * Обращение-проблема (шаги или специалист): проверка — «Закрыть вопрос / Не помогло» (ТЗ v4.23).
  * Вопрос и заявка (answer, request) — проверяются кнопками по смыслу ответа (ТЗ v4.13).
  */
-export function isProblemTask(t: Pick<Task, 'triage' | 'escalation'>): boolean {
+export function isProblemTask(t: Pick<Task, 'triage' | 'escalation' | 'orgAnswerId'>): boolean {
   return (
-    (!!t.triage && (t.triage.mode === 'steps' || t.triage.mode === 'escalate')) || !!t.escalation
+    (!!t.triage && (t.triage.mode === 'steps' || t.triage.mode === 'escalate')) ||
+    !!t.escalation ||
+    !!t.orgAnswerId
   );
 }
 

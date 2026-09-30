@@ -1,5 +1,10 @@
 import { AdminOnly, Public } from '../auth/auth.guard';
 import { cleanProfile } from '../org/profile';
+import { RulesService } from '../org/rules.service';
+import { censor } from '../org/rules';
+import { samplesBlock } from '../org/samples';
+import { SamplesService } from '../org/samples.service';
+import { FlowService } from './flow.service';
 import {
   BadRequestException,
   Body,
@@ -71,7 +76,30 @@ export class LlmController {
   constructor(
     private readonly llm: LlmService,
     @Inject(STORAGE) private readonly storage: Storage,
+    private readonly rules: RulesService,
+    private readonly samples: SamplesService,
+    private readonly flow: FlowService,
   ) {}
+
+  /** «Проверить» в «Готовых ответах»: что увидит человек на эту фразу и почему. */
+  @AdminOnly()
+  @Post('answers-test')
+  @HttpCode(200)
+  async answersTest(@Body() body: { text?: unknown } & WithModel) {
+    const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 1000) : '';
+    if (!text) throw new BadRequestException('Напишите фразу для проверки');
+    const r = await this.flow.pickCanned(text, body?.model);
+    return {
+      candidates: r.list.map((c) => ({
+        id: c.answer.id,
+        title: c.answer.title,
+        keyword: c.keyword,
+      })),
+      chosen: r.answer ? { id: r.answer.id, title: r.answer.title } : null,
+      reason: r.reason,
+      source: r.source,
+    };
+  }
 
   /** Активные сообщества Бат-Форума (стартовые создаёт ForumService при запуске). */
   private async communities() {
@@ -100,12 +128,17 @@ export class LlmController {
     if (!question) throw new BadRequestException('Напишите вопрос для проверки');
     if (question.length > 1000) throw new BadRequestException('Вопрос — не длиннее 1000 символов');
     try {
-      return await this.llm.preview(
+      // пробный ответ — с сохранёнными образцами ответов, как настоящий (ТЗ v4.27)
+      const samples = samplesBlock(await this.samples.pick(question));
+      const r = await this.llm.preview(
         profile,
         question,
         body?.model,
         requestSignal() ?? AbortSignal.timeout(180_000),
+        samples,
       );
+      // пробный ответ — с теми же жёсткими правилами, что и настоящий (ТЗ v4.26)
+      return { ...r, reply: censor(r.reply, await this.rules.forbidden()) };
     } catch (e) {
       if (e instanceof HttpException) throw e;
       throw new BadRequestException(errorMessage(e));
@@ -125,7 +158,9 @@ export class LlmController {
   @Post('questions')
   async questions(@Body() body: { messages?: unknown; hard?: boolean } & WithModel) {
     try {
-      return await this.llm.questions(messages(body?.messages), !!body?.hard, body?.model);
+      return this.flow.censorQuestions(
+        await this.llm.questions(messages(body?.messages), !!body?.hard, body?.model),
+      );
     } catch (e) {
       throw new BadRequestException(errorMessage(e));
     }
@@ -152,7 +187,8 @@ export class LlmController {
     try {
       // messages — переписка (необязательно): чтобы ответ на «F» или «привет» звучал по контексту
       const history = body.messages === undefined ? [] : messages(body.messages);
-      return await this.llm.triage(body.text, body.model, history);
+      // разбор + готовый ответ + жёсткие правила → путь дальше (ТЗ v4.25–v4.27)
+      return await this.flow.triage(body.text, history, body.model);
     } catch (e) {
       throw new BadRequestException(errorMessage(e));
     }
@@ -217,58 +253,13 @@ export class LlmController {
   ) {
     const focus = Array.isArray(body?.focus) ? body.focus.map(String).slice(0, 3) : [];
     try {
-      return await this.llm.supportQuestions(
+      return await this.flow.supportQuestions(
         messages(body?.messages),
         focus,
         !!body?.urgent,
         body?.model,
       );
     } catch (e) {
-      throw new BadRequestException(errorMessage(e));
-    }
-  }
-
-  @Post('steps')
-  async steps(
-    @Body() body: { messages?: unknown; urgent?: boolean; attempt?: number } & WithModel,
-  ) {
-    const attempt = Math.max(1, Math.min(5, Number(body?.attempt) || 1));
-    try {
-      return await this.llm.steps(messages(body?.messages), !!body?.urgent, attempt, body?.model);
-    } catch (e) {
-      throw new BadRequestException(errorMessage(e));
-    }
-  }
-
-  /** Ответ человека на шаг своими словами (ТЗ v4.21). */
-  @Post('step-reply')
-  @HttpCode(200)
-  async stepReply(
-    @Body()
-    body: { messages?: unknown; plan?: unknown; index?: unknown; urgent?: boolean } & WithModel,
-  ) {
-    const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
-    const plan = (Array.isArray(body?.plan) ? body.plan : [])
-      .slice(0, 12)
-      .map((x: Record<string, unknown>) => ({
-        title: str(x?.title, 120),
-        instruction: str(x?.instruction, 400),
-        check: str(x?.check, 160),
-        result: x?.result === 'ok' || x?.result === 'fail' ? x.result : undefined,
-      }))
-      .filter((x) => x.title);
-    if (!plan.length) throw new BadRequestException('Нет плана');
-    const index = Math.max(0, Math.min(plan.length - 1, Number(body?.index) || 0));
-    try {
-      return await this.llm.stepReply(
-        messages(body?.messages),
-        plan,
-        index,
-        !!body?.urgent,
-        body?.model,
-      );
-    } catch (e) {
-      if (e instanceof HttpException) throw e;
       throw new BadRequestException(errorMessage(e));
     }
   }
@@ -315,6 +306,15 @@ export class LlmController {
     // «пульс» раз в 10 с, пока модель думает: туннели и прокси не закрывают «молчащее» соединение
     const ping = setInterval(() => res.write(': ping\n\n'), 10_000);
     const cleaner = new StreamCleaner();
+    // запрещённое в ответах (ТЗ v4.26) — убираем по ходу, до того как увидит человек
+    const view = await this.flow.censorStream();
+    // образцы ответов организации (ТЗ v4.27) — только для ответа по существу
+    const samples = mode === 'answer' ? await this.flow.samplesPrompt(history) : '';
+    const emit = (final: boolean) => {
+      const v = view.next(cleaner.text, final);
+      if (v.reset !== null) send('reset', { text: v.reset });
+      if (v.delta) send('token', { t: v.delta });
+    };
     try {
       const { model, chunks } = await this.llm.stream(
         history,
@@ -322,22 +322,21 @@ export class LlmController {
         plan,
         body?.model,
         abort.signal,
+        samples,
       );
       send('meta', { model });
       for await (const chunk of chunks) {
-        const { delta, reset, steps } = cleaner.push(chunk);
+        const { steps } = cleaner.push(chunk);
         for (const n of steps) send('step', { n });
-        if (reset !== null) send('reset', { text: reset });
-        if (delta) send('token', { t: delta });
+        emit(false);
       }
       const tail = cleaner.end();
       for (const n of tail.steps) send('step', { n });
-      if (tail.reset !== null) send('reset', { text: tail.reset });
-      if (tail.delta) send('token', { t: tail.delta });
+      emit(true);
       // чем закончился ответ — этап и кнопки по смыслу (ТЗ v4.13); для реплик «спасибо» не нужно
       if (body?.assess === true && !abort.signal.aborted)
-        send('outcome', await this.llm.assess(history, cleaner.text, body?.model));
-      send('done', { text: cleaner.text });
+        send('outcome', await this.llm.assess(history, view.text, body?.model));
+      send('done', { text: view.text });
     } catch (e) {
       if (!abort.signal.aborted) send('error', { message: errorMessage(e) });
     } finally {

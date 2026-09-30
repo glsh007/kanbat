@@ -91,7 +91,22 @@ export interface Triage {
   difficulty: TaskDifficulty;
   title: string;
   estimated_seconds: number;
+  /** Какие жёсткие правила организации сработали (ТЗ v4.26). */
+  rules?: { action: 'urgent' | 'specialist' | 'hard' | 'service'; phrase: string }[];
+  /** Пояснение администратора для «Сразу к специалисту». */
+  rule_note?: string;
+  /** Что помощник сделает дальше — выбирает сервер (ТЗ v4.27): одно правило и для обращений, и для прогона. */
+  route?: TriageRoute;
+  /** Реплика с предложением передать специалисту (route = specialist или после уточнений). */
+  offer?: string;
 }
+
+/**
+ * Путь обращения после разбора (ТЗ v4.27): describe — обращения нет, живой ответ; canned — готовый
+ * ответ организации; clarify — уточняющие вопросы; specialist — предложение передать специалисту;
+ * answer — ответ ИИ.
+ */
+export type TriageRoute = 'describe' | 'canned' | 'clarify' | 'specialist' | 'answer';
 
 export interface SolutionStep {
   title: string;
@@ -102,33 +117,6 @@ export interface SolutionStep {
   yes: string;
   /** Ответ «не вышло»: «Нет, не открывается». */
   no: string;
-}
-
-export interface StepsResult {
-  intro: string;
-  steps: SolutionStep[];
-  self_solvable: boolean;
-  escalate_reason: string;
-}
-
-/** Шаг плана, как его видит модель при ответе человека (ТЗ v4.21). */
-export interface PlanStepRef {
-  title: string;
-  instruction?: string;
-  check?: string;
-  /** ok — сделано, fail — не подошло, иначе — ещё не пройден */
-  result?: string;
-}
-
-export const STEP_OUTCOMES = ['done', 'ask', 'failed', 'other', 'solved', 'specialist'] as const;
-export type StepOutcome = (typeof STEP_OUTCOMES)[number];
-
-export interface StepReplyResult {
-  outcome: StepOutcome;
-  /** Живая реакция, 1–3 предложения. */
-  reply: string;
-  /** Новое действие вместо шага — только для failed / other. */
-  step: { title: string; instruction: string; check: string } | null;
 }
 
 export interface HandoffResult {

@@ -2,6 +2,7 @@ import type { User } from '@app/shared';
 import { useEffect, useId, useState } from 'react';
 import { formatDate } from '@/lib/format';
 import { saveAutoDelete } from '@/lib/session';
+import { brandWords } from '@/brand/orgBrand';
 
 const YEAR = 365 * 24 * 3_600_000;
 
@@ -49,7 +50,7 @@ export function AutoDelete({ user }: { user: User }) {
       </label>
       <p id={hintId} className="pl-6 text-xs text-fg-muted" aria-live="polite">
         {on
-          ? `Включено. Если вы не зайдёте до ${formatDate(until)}, аккаунт удалится со всеми обращениями, переписками и темами на Бат-Форуме. Каждый вход продлевает срок. Предупредить заранее мы не сможем — у Канбата нет вашей почты.`
+          ? `Включено. Если вы не зайдёте до ${formatDate(until)}, аккаунт удалится со всеми обращениями, переписками и темами на ${brandWords().forumPrep}. Каждый вход продлевает срок. Предупредить заранее мы не сможем — у Канбата нет вашей почты.`
           : 'Выключено: аккаунт хранится, пока вы сами его не удалите.'}
       </p>
       {error && (

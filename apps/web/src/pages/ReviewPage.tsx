@@ -1,3 +1,4 @@
+import { brandWords } from '@/brand/orgBrand';
 import {
   REPORT_REASONS,
   type CommunityDraft,
@@ -16,13 +17,7 @@ import { useRole } from '@/features/board/store';
 import { CommunityDialog } from '@/features/forum/CommunityDialog';
 import { CommunityIcon } from '@/features/forum/community';
 import { ForumFlash, ThreadFlags } from '@/features/forum/parts';
-import {
-  FORUM_NAME,
-  handle,
-  useForumFlash,
-  useForumSections,
-  useReviewCount,
-} from '@/features/forum/sections';
+import { handle, useForumFlash, useForumSections, useReviewCount } from '@/features/forum/sections';
 import { useThreadActions } from '@/features/forum/ThreadActions';
 import { AppShell } from '@/layout/AppShell';
 import { useNavTitle } from '@/features/nav/useNavTitle';
@@ -63,11 +58,11 @@ export function ReviewPage() {
 
   if (!specialist)
     return (
-      <AppShell title={FORUM_NAME} subtitle="На проверке">
+      <AppShell title={brandWords().forum} subtitle="На проверке">
         <p className="p-6 text-sm text-fg-muted">
           Доступ только для специалистов поддержки.{' '}
           <Link to="/forum" className="font-medium text-heading underline underline-offset-4">
-            К Бат-Форуму
+            К {brandWords().forumDat}
           </Link>
         </p>
       </AppShell>
@@ -76,7 +71,10 @@ export function ReviewPage() {
   const empty = data && !data.reports.length && !data.proposals.length && !dmReports.length;
 
   return (
-    <AppShell title="На проверке" subtitle={`${FORUM_NAME}: жалобы и предложения сообществ`}>
+    <AppShell
+      title="На проверке"
+      subtitle={`${brandWords().forum}: жалобы и предложения сообществ`}
+    >
       <div className="mx-auto flex w-full max-w-[880px] flex-col gap-8 px-3 py-4 sm:px-4 lg:px-6 lg:py-6">
         {error && (
           <p role="alert" className="text-sm font-medium text-heading">
@@ -92,7 +90,7 @@ export function ReviewPage() {
               to="/forum"
               className="text-sm font-medium text-heading underline underline-offset-4"
             >
-              К Бат-Форуму
+              К {brandWords().forumDat}
             </Link>
           </div>
         )}

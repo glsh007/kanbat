@@ -17,6 +17,12 @@ import { Markdown } from '@/features/task/Markdown';
 import { AppShell } from '@/layout/AppShell';
 import { orgApi, serverApi } from '@/lib/api';
 import { useSupportTimers } from '@/features/support/tickets';
+import { CannedAnswers } from '@/features/org/CannedAnswers';
+import { HardRules } from '@/features/org/HardRules';
+import { AnswerSamples } from '@/features/org/AnswerSamples';
+import { CheckQuestions } from '@/features/org/CheckQuestions';
+import { ErrorReviews } from '@/features/org/ErrorReviews';
+import { BrandSettings } from '@/features/org/BrandSettings';
 import { cn } from '@/lib/cn';
 import { useUser } from '@/lib/session';
 
@@ -55,6 +61,7 @@ function OrgEditor() {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rulesDirty, setRulesDirty] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -249,6 +256,12 @@ function OrgEditor() {
             <Preview profile={draft} />
           </>
         )}
+        <CannedAnswers Block={Block} />
+        <HardRules Block={Block} onDirtyChange={setRulesDirty} />
+        <AnswerSamples Block={Block} />
+        <CheckQuestions Block={Block} />
+        <ErrorReviews Block={Block} />
+        <BrandSettings Block={Block} />
         <SupportTimersBlock />
       </div>
 
@@ -257,11 +270,15 @@ function OrgEditor() {
           <div className="mx-auto flex w-full max-w-[880px] flex-wrap items-center gap-2 px-3 py-3 sm:px-4 lg:px-6">
             <p className="min-w-0 flex-1 text-sm text-fg-muted" aria-live="polite">
               {flash ??
-                (dirty
-                  ? 'Есть несохранённые изменения'
-                  : saved?.updatedAt
-                    ? `Сохранено ${new Date(saved.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} · ${saved.updatedBy ?? ''}`
-                    : '')}
+                (dirty && rulesDirty
+                  ? 'Есть несохранённые изменения. Жёсткие правила сохраняются своей кнопкой в их блоке.'
+                  : dirty
+                    ? 'Есть несохранённые изменения'
+                    : rulesDirty
+                      ? 'Жёсткие правила не сохранены — кнопка «Сохранить правила» в их блоке'
+                      : saved?.updatedAt
+                        ? `Сохранено ${new Date(saved.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} · ${saved.updatedBy ?? ''}`
+                        : '')}
             </p>
             {saved && dirty && (
               <Button

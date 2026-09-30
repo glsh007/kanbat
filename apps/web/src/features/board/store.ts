@@ -91,6 +91,8 @@ type BoardState = BoardData & {
     msg: Omit<Message, 'id' | 'taskId' | 'createdAt'> & { id?: string },
   ) => string;
   removeMessage: (taskId: string, messageId: string) => void;
+  /** Поменять поля сообщения (например, «отправлено на разбор»). */
+  patchMessage: (taskId: string, messageId: string, patch: Partial<Message>) => void;
   setLive: (taskId: string, live: LiveReply | null) => void;
   setSettings: (patch: Partial<Settings>) => void;
 
@@ -376,6 +378,16 @@ export const useBoard = create<BoardState>()(
             order: reposition(s.order, s.tasks, id, 'draft', 0),
           };
         }),
+
+      patchMessage: (taskId, messageId, patch) =>
+        set((s) => ({
+          messages: {
+            ...s.messages,
+            [taskId]: (s.messages[taskId] ?? []).map((m) =>
+              m.id === messageId ? { ...m, ...patch } : m,
+            ),
+          },
+        })),
 
       addMessage: (taskId, raw) => {
         const id = raw.id ?? newId();

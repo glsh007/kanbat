@@ -1,4 +1,5 @@
 import { Plus } from 'lucide-react';
+import { isSendKey } from '@/lib/keys';
 import { useId, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { fieldClass } from '@/components/ui/Field';
@@ -72,7 +73,7 @@ export function NewTaskComposer({ onCreate }: { onCreate: (text: string, send: b
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (isSendKey(e)) {
             e.preventDefault();
             submit();
           } else if (e.key === 'Escape') {

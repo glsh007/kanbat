@@ -4,6 +4,7 @@ import {
   type Message,
   type SpecialistRef,
 } from '@app/shared';
+import { isSendKey, SEND_HINT } from '@/lib/keys';
 import { ArrowLeft, Check, Flag, Hand, Lock, Send, Undo2, X, XCircle } from 'lucide-react';
 import { NavArrows } from '@/layout/NavArrows';
 import { motion } from 'motion/react';
@@ -376,7 +377,10 @@ export function SpecialistPanel({
                       value={text}
                       onChange={(ev) => setText(ev.target.value)}
                       onKeyDown={(ev) => {
-                        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) send();
+                        if (isSendKey(ev)) {
+                          ev.preventDefault();
+                          send();
+                        }
                       }}
                       placeholder="Ответ пользователю: что сделали или что ему сделать…"
                       className={cn(fieldClass, 'min-h-11 flex-1 resize-none py-2 text-sm')}
@@ -394,7 +398,7 @@ export function SpecialistPanel({
                     {e.status === 'answered' && e.closeAt
                       ? `Ждём пользователя: если он не ответит, заявка закроется сама ${leftLabel(e.closeAt, now)}. `
                       : `Ответ придёт в чат пользователя. Если он не ответит ${timers.closeHours} ч — заявка закроется сама. `}
-                    Ctrl+Enter — отправить.
+                    {SEND_HINT}.
                   </p>
                 </>
               )}

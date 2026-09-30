@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { brandWords } from '@/brand/orgBrand';
 
 /**
  * История переходов Канбата (ТЗ v4.9, п. 11) — как «Отменить / Вернуть» в Ворде, только для экранов:
@@ -98,12 +99,12 @@ export function describePath(path: string): string {
   if (p.startsWith('/s/')) return 'раздел';
   if (p === '/forum/review') return 'на проверке';
   if (p === '/org') return 'организация';
-  if (p.startsWith('/messages/archive')) return 'архив Бат-общения';
+  if (p.startsWith('/messages/archive')) return `архив ${brandWords().dmGen}`;
   if (p.startsWith('/messages/')) return 'переписка';
-  if (p === '/messages') return 'Бат-общение';
-  if (p.startsWith('/forum/t/')) return 'тема Бат-Форума';
-  if (p.startsWith('/forum/s/')) return 'сообщество Бат-Форума';
-  if (p.startsWith('/forum')) return 'Бат-Форум';
+  if (p === '/messages') return brandWords().dm;
+  if (p.startsWith('/forum/t/')) return `тема ${brandWords().forumGen}`;
+  if (p.startsWith('/forum/s/')) return `сообщество ${brandWords().forumGen}`;
+  if (p.startsWith('/forum')) return brandWords().forum;
   if (/^\/support\/.*t\//.test(p)) return 'заявка';
   if (p.startsWith('/support')) return 'пульт поддержки';
   return 'предыдущий экран';

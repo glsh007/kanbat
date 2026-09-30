@@ -30,12 +30,15 @@ import { cn } from '@/lib/cn';
 import { navItemClass } from './navItem';
 import { DmBadge } from '@/features/dm/DmBadge';
 import { UserCard } from './UserCard';
+import { useBrandWords } from '@/brand/orgBrand';
 
 /**
  * Меню пользователя: логотип, его разделы, Бат-Форум, тема.
  * Используется и в боковой панели (desktop), и в выдвижном листе (mobile).
  */
 export function SectionNav({ onNavigate }: { onNavigate?: () => void }) {
+  // названия — реактивно: администратор сменил в «Оформлении» — меню обновится сразу
+  const words = useBrandWords();
   const tasks = useBoard((s) => s.tasks);
   const sections = useBoard((s) => s.sections);
   const sorting = useBoard((s) => s.sorting);
@@ -77,7 +80,7 @@ export function SectionNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <div className="px-2 pt-1">
-        <Logo variant="full" size={28} />
+        <Logo variant="full" size={28} poweredBy />
       </div>
 
       <nav aria-label="Разделы" className="flex min-h-0 flex-1 flex-col gap-1">
@@ -172,11 +175,11 @@ export function SectionNav({ onNavigate }: { onNavigate?: () => void }) {
         <h2 className="px-3 pt-4 pb-1 text-xs font-medium text-fg-muted">Сообщество</h2>
         <NavLink to="/forum" className={navItemClass} onClick={onNavigate}>
           <MessagesSquare size={18} aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Бат-Форум</span>
+          <span className="min-w-0 flex-1 truncate">{words.forum}</span>
         </NavLink>
         <NavLink to="/messages" className={navItemClass} onClick={onNavigate}>
           <MessageCircle size={18} aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Бат-общение</span>
+          <span className="min-w-0 flex-1 truncate">{words.dm}</span>
           <DmBadge />
         </NavLink>
       </nav>

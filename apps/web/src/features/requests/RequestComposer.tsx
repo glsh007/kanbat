@@ -1,4 +1,5 @@
 import { ArrowUp } from 'lucide-react';
+import { isSendKey, SEND_HINT } from '@/lib/keys';
 import { useId, useState } from 'react';
 import { EXAMPLES } from '@/features/board/examples';
 import { SimilarThreads } from '@/features/forum/SimilarThreads';
@@ -49,7 +50,7 @@ export function RequestComposer({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (isSendKey(e)) {
               e.preventDefault();
               submit();
             }
@@ -61,7 +62,7 @@ export function RequestComposer({
           )}
         />
         <div className="flex items-center gap-2">
-          <p className="min-w-0 flex-1 text-xs text-fg-muted">Enter — отправить</p>
+          <p className="min-w-0 flex-1 text-xs text-fg-muted">{SEND_HINT}</p>
           <button
             type="submit"
             disabled={!text.trim()}

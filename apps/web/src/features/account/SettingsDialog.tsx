@@ -16,6 +16,7 @@ import { AutoDelete } from './AutoDelete';
 import { AvatarSettings } from './AvatarSettings';
 import { RecoverySettings } from './RecoveryPhrase';
 import { ScalePicker } from './ScalePicker';
+import { brandWords } from '@/brand/orgBrand';
 
 type Confirm = null | 'delete';
 
@@ -134,7 +135,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           {user && (
             <section className={section} aria-labelledby="set-dm">
               <h3 id="set-dm" className={h}>
-                Бат-общение
+                {brandWords().dm}
               </h3>
               <DmSettings user={user} />
             </section>
@@ -146,8 +147,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             </h3>
             <p className="text-xs text-fg-muted">
               {specialist
-                ? `Вы вошли как специалист «${user?.name}». Удаление сотрёт ваш вход и сообщения на Бат-Форуме; ответы в заявках останутся у пользователей.`
-                : `Вы вошли как «${user?.name}». Удаление сотрёт ваши обращения, переписку, разделы и сообщения на Бат-Форуме и выполнит выход на всех устройствах.`}
+                ? `Вы вошли как специалист «${user?.name}». Удаление сотрёт ваш вход и сообщения на ${brandWords().forumPrep}; ответы в заявках останутся у пользователей.`
+                : `Вы вошли как «${user?.name}». Удаление сотрёт ваши обращения, переписку, разделы и сообщения на ${brandWords().forumPrep} и выполнит выход на всех устройствах.`}
             </p>
             {user?.username ? (
               <p className="text-sm">
@@ -180,7 +181,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         title="Удалить аккаунт навсегда?"
         description={
           specialist
-            ? `Специалист «${user?.name ?? ''}» и его сообщения на Бат-Форуме будут удалены с сервера. Восстановить нельзя.`
+            ? `Специалист «${user?.name ?? ''}» и его сообщения на ${brandWords().forumPrep} будут удалены с сервера. Восстановить нельзя.`
             : `Пользователь «${user?.name ?? ''}», все обращения, переписка, разделы и обращения к специалисту будут удалены с сервера. Восстановить нельзя.`
         }
         footer={

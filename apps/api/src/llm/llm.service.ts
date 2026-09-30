@@ -5,10 +5,6 @@ import {
   mockHandoff,
   mockPlan,
   mockQuestions,
-  mockSteps,
-  mockStepReply,
-  isBareAck,
-  withoutQuestions,
   mockStream,
   mockSupportQuestions,
   mockTriage,
@@ -39,18 +35,12 @@ import type {
   PlanResult,
   QuestionsResult,
   SectionRef,
-  SolutionStep,
   SortItem,
   SortResult,
-  StepsResult,
   StreamMode,
   Triage,
   AnswerOutcome,
-  PlanStepRef,
-  StepOutcome,
-  StepReplyResult,
 } from './types';
-import { STEP_OUTCOMES } from './types';
 
 /** Модели по убыванию предпочтения, если пользователь не выбрал свою. */
 const PREFERRED = [
@@ -140,6 +130,11 @@ export class LlmService {
   }
 
   /** Какую модель использовать для запроса; null — демо-режим. */
+  /** Какая модель ответит на запрос (null — ИИ недоступен). Для прогона проверочных вопросов. */
+  modelFor(requested?: string | null): Promise<string | null> {
+    return this.resolve(requested);
+  }
+
   private async resolve(requested?: string | null): Promise<string | null> {
     const s = await this.status();
     if (s.provider === 'mock') return null;
@@ -421,96 +416,30 @@ export class LlmService {
     return { intro: r.intro?.trim() || 'Уточню главное.', questions };
   }
 
-  async steps(
-    history: ChatMessage[],
-    urgent: boolean,
-    attempt: number,
-    requested?: string | null,
-  ): Promise<StepsResult> {
-    const model = await this.resolve(requested);
-    if (!model) return this.withoutAi(() => mockSteps(urgent, attempt));
-    const r = await this.guard('steps', () =>
-      this.client.json<Partial<StepsResult>>(
-        model,
-        toOllama(P.STEPS(this.base(), urgent, attempt), this.trim(history)),
-        P.STEPS_SCHEMA,
-      ),
-    );
-    const steps = (r.steps ?? [])
-      .filter((x) => x && typeof x.title === 'string' && x.title.trim())
-      .slice(0, 5)
-      .map((x) => normalizeStep(x));
-    const selfSolvable = r.self_solvable !== false && steps.length > 0;
-    return {
-      intro: r.intro?.trim() || 'Пройдём по шагам.',
-      steps: selfSolvable ? steps : [],
-      self_solvable: selfSolvable,
-      escalate_reason:
-        (r.escalate_reason ?? '').trim() || (selfSolvable ? '' : 'Самостоятельно не решить.'),
-    };
-  }
-
   /**
-   * Ответ человека на шаг своими словами (ТЗ v4.21): живая реакция + итог для кода.
-   * Без модели — разбор по словам (mockStepReply).
+   * Готовый ответ организации (ТЗ v4.25): из кандидатов по словам модель выбирает тот, что подходит
+   * по смыслу, или ни одного. Номер вне списка — «ни одного».
    */
-  async stepReply(
-    history: ChatMessage[],
-    plan: PlanStepRef[],
-    index: number,
-    urgent: boolean,
+  async pickCanned(
+    text: string,
+    list: { title: string; when: string; body: string }[],
     requested?: string | null,
-  ): Promise<StepReplyResult> {
-    const last = [...history].reverse().find((m) => m.role === 'user')?.content ?? '';
+  ): Promise<{ index: number | null; reason: string }> {
+    if (!list.length) return { index: null, reason: 'нет кандидатов' };
     const model = await this.resolve(requested);
-    if (!model) return this.withoutAi(() => mockStepReply(last, plan, index));
-    // ошибка модели уходит клиенту: он разберёт ответ по словам сам и не выдумает шагов
-    const r = await this.guard('step-reply', () =>
-      this.client.json<Partial<StepReplyResult>>(
+    if (!model) throw new ServiceUnavailableException('ИИ сейчас недоступен');
+    const r = await this.guard('canned-pick', () =>
+      this.client.json<{ pick?: number; reason?: string }>(
         model,
-        toOllama(P.STEP_REPLY(this.base(), plan, index, urgent), this.trim(history)),
-        P.STEP_REPLY_SCHEMA,
+        toOllama(P.CANNED_PICK(list), [
+          { role: 'user', content: maskPersonalData(text).text.slice(0, MESSAGE_CHAR_LIMIT) },
+        ]),
+        P.CANNED_PICK_SCHEMA,
       ),
     );
-    let outcome = STEP_OUTCOMES.includes(r.outcome as StepOutcome)
-      ? (r.outcome as StepOutcome)
-      : mockStepReply(last, plan, index).outcome;
-    let reply = typeof r.reply === 'string' ? r.reply.trim().slice(0, 600) : '';
-    const raw = r.step && typeof r.step === 'object' ? r.step : null;
-    const step =
-      raw && typeof raw.title === 'string' && raw.title.trim()
-        ? (() => {
-            const n = normalizeStep(raw as SolutionStep);
-            return { title: n.title.slice(0, 80), instruction: n.instruction, check: n.check };
-          })()
-        : null;
-    // модель переспрашивает, хотя человек уже ответил («не приходят», «нет»), — идём дальше по плану:
-    // переспрос одного и того же вопроса по кругу злит больше всего (ТЗ v4.23)
-    if (outcome === 'ask' && !isBareAck(last)) {
-      outcome = 'done';
-      reply = withoutQuestions(reply);
-    }
-    const needsStep = outcome === 'failed' || outcome === 'other';
-    // «не помогло» без нового действия: есть следующий шаг плана — идём к нему, нет — честно про специалиста
-    if (needsStep && !step && index + 1 < plan.length)
-      return { outcome, reply: withoutQuestions(reply), step: null };
-    if (needsStep && !step)
-      return {
-        outcome: 'specialist',
-        reply: `${reply ? `${reply} ` : ''}Больше идей, что можно сделать самому, у меня нет. Передать обращение специалисту?`,
-        step: null,
-      };
-    return {
-      outcome,
-      reply:
-        reply ||
-        (outcome === 'ask'
-          ? 'Что получилось в итоге?'
-          : outcome === 'solved'
-            ? 'Отлично, рад, что всё заработало!'
-            : ''),
-      step: needsStep ? step : null,
-    };
+    const n = Math.round(Number(r.pick));
+    const reason = typeof r.reason === 'string' ? r.reason.trim().slice(0, 200) : '';
+    return n >= 1 && n <= list.length ? { index: n - 1, reason } : { index: null, reason };
   }
 
   async handoff(history: ChatMessage[], requested?: string | null): Promise<HandoffResult> {
@@ -535,13 +464,14 @@ export class LlmService {
     };
   }
 
-  /** Поток текста ответа + имя модели (null — демо). */
+  /** Поток текста ответа + имя модели (null — демо). samples — блок образцов ответов (ТЗ v4.27). */
   async stream(
     history: ChatMessage[],
     mode: StreamMode,
     plan: string[],
     requested: string | null | undefined,
     signal: AbortSignal,
+    samples = '',
   ): Promise<{ model: string | null; chunks: AsyncGenerator<string> }> {
     const model = await this.resolve(requested);
     const trimmed = this.trim(history);
@@ -552,7 +482,7 @@ export class LlmService {
         chunks: withSignature(mockStream(mockAnswer(trimmed, mode, plan), signal), sign),
       }));
     const execute = mode === 'execute' && plan.length > 0;
-    const system = execute ? P.EXECUTE(this.base(), plan) : P.ANSWER(this.base());
+    const system = execute ? P.EXECUTE(this.base(), plan) : P.ANSWER(this.base(), samples);
     const limit = execute ? LLM_LIMITS.executeTokens : LLM_LIMITS.answerTokens;
     return {
       model,
@@ -572,6 +502,7 @@ export class LlmService {
     question: string,
     requested: string | null | undefined,
     signal: AbortSignal,
+    samples = '',
   ): Promise<{ model: string | null; reply: string }> {
     const model = await this.resolve(requested);
     const history: ChatMessage[] = [
@@ -588,7 +519,7 @@ export class LlmService {
           .filter(Boolean)
           .join('\n\n'),
       }));
-    const system = P.ANSWER(this.org.base(profile));
+    const system = P.ANSWER(this.org.base(profile), samples);
     const cleaner = new StreamCleaner();
     const chunks = this.track(
       this.client.stream(model, toOllama(system, history), signal, LLM_LIMITS.answerTokens),
@@ -778,22 +709,6 @@ export function askForDetails(t: Triage, text: string): Triage {
     ...t,
     structure: 'loose',
     missing: GENERIC_MISSING,
-  };
-}
-
-/** Шаг решения (ТЗ v4.21): ответ человек пишет сам, кнопок «Да / Нет» больше нет. */
-function normalizeStep(x: Partial<SolutionStep> & { title: string }): SolutionStep {
-  const clip = (v: unknown, n: number) =>
-    String(v ?? '')
-      .trim()
-      .replace(/\s+/g, ' ')
-      .slice(0, n);
-  return {
-    title: x.title.trim(),
-    instruction: clip(x.instruction, 400),
-    check: clip(x.check, 120),
-    yes: '',
-    no: '',
   };
 }
 

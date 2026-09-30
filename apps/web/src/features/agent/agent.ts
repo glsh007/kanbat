@@ -1,9 +1,11 @@
 import {
   CLOSE_REASON_LABELS,
+  RULE_ACTION_LABELS,
   isChitChat,
   maskPersonalData,
   isProblemTask,
   type AgentStep,
+  type CannedView,
   type AnswerOutcome,
   type ChatMessage,
   type ColumnId,
@@ -11,18 +13,15 @@ import {
   type EscalationStatus,
   type Handoff,
   type Message,
-  type PlanStep,
-  type StepReplyResult,
   type StreamMode,
   type Triage,
 } from '@app/shared';
 import { useBoard } from '@/features/board/store';
 import { faqById, rankFaq } from '@/features/faq/faq';
 import { aiAvailable, ensureStatus } from './llmStatus';
-import { isBareAck, localStepReply, withoutQuestions } from './stepWords';
 import { claimsHandoff, honestHandoff } from './honesty';
 import { sortTask } from '@/features/sections/sorter';
-import { api, streamReply } from '@/lib/api';
+import { answersApi, api, reviewsApi, streamReply } from '@/lib/api';
 
 /**
  * Оркестратор обращений (ТЗ v2, пп. 2–3, 13).
@@ -30,10 +29,10 @@ import { api, streamReply } from '@/lib/api';
  * Обращение → «Что произошло» (разбор: суть, сервис, факты, чего не хватает, срочность, режим)
  *   → Уточнение: вопросы ТОЛЬКО по недостающему (0–3; срочное — не больше 1)
  *   → режим:
- *       steps    — шаги по одному; ответ на шаг человек пишет сам (или «Сделал(а)»), ИИ отвечает
- *                  живой реакцией. Не помогло — новый шаг в тот же план, а не новый план (ТЗ v4.21)
- *                  → Проверка «Закрыть вопрос / Не помогло»
- *       answer   — ответ текстом (трудный — план ⏸ → выполнение), A без остановок до «Готово»
+ *       answer / request / steps — ответ по существу ОДНИМ сообщением: если нужно несколько действий,
+ *                  они перечислены списком; человек отвечает своими словами (ТЗ v4.24 — пошаговых окон нет)
+ *                  → Проверка («Закрыть вопрос / Не помогло» у проблемы)
+ *       готовый ответ организации — дословно, если подходит по смыслу (ТЗ v4.25)
  *       escalate — ИИ честно говорит, что нужен специалист, и спрашивает, передать ли
  *
  * Специалист — только с согласия человека (ТЗ v4.21): после 2 неудач, при «самому не решить» или без ИИ
@@ -70,7 +69,6 @@ export function isRunning(id: string): boolean {
 }
 
 const model = () => S().settings.model;
-const urgent = (id: string) => task(id)?.urgency === 'critical';
 
 async function moveTo(id: string, column: ColumnId, pause = true): Promise<void> {
   const t = task(id);
@@ -83,7 +81,8 @@ async function moveTo(id: string, column: ColumnId, pause = true): Promise<void>
 export function toChat(messages: Message[]): ChatMessage[] {
   const out: ChatMessage[] = [];
   for (const m of messages) {
-    if (m.kind === 'error' || m.role === 'system') continue;
+    if (m.kind === 'error' || m.kind === 'hint' || m.kind === 'review' || m.role === 'system')
+      continue;
     let content = m.content;
     if (m.kind === 'questions' && m.questions)
       content = `${m.content}\n${m.questions.map((q, i) => `${i + 1}. ${q.text}`).join('\n')}`;
@@ -94,6 +93,12 @@ export function toChat(messages: Message[]): ChatMessage[] {
     if (m.kind === 'triage' && m.triage)
       content = `Разбор: ${m.triage.summary}. Сервис: ${m.triage.service}. Срочность: ${m.triage.urgency}.`;
     if (m.kind === 'handoff') content = 'Обращение передано специалисту поддержки.';
+    if (m.kind === 'org' && m.org)
+      content = `Человеку показан готовый ответ организации «${m.org.title}» (дословно):\n${m.content}${
+        m.org.links.length
+          ? `\nСсылки: ${m.org.links.map((l) => `${l.label} — ${l.url}`).join('; ')}`
+          : ''
+      }`;
     if (m.kind === 'specialist') content = `Специалист поддержки: ${m.content}`;
     out.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content });
   }
@@ -200,14 +205,24 @@ export async function start(id: string): Promise<void> {
     // в фоне: ИИ раскладывает задачу по разделам пользователя
     void sortTask(id);
     await moveTo(id, 'clarify');
-    // Срочное с обходным путём — без вопросов; иначе — только по недостающему
-    if (tr.missing.length && !(tr.urgency === 'critical' && tr.mode === 'steps'))
-      return askQuestions(id);
+    // путь выбирает сервер (ТЗ v4.27) — то же правило проверяет прогон проверочных вопросов
+    const route = tr.route ?? legacyRoute(tr);
+    // готовый ответ организации подошёл по смыслу — показываем его дословно, без уточнений (ТЗ v4.25)
+    if (route === 'canned' && tr.canned) return showOrgAnswer(id, tr.canned);
+    if (route === 'clarify') return askQuestions(id);
     return proceed(id);
   } catch (e) {
     end(id, signal);
     fail(id, 'classify', e);
   }
+}
+
+/** Путь для ответа разбора без `route` (старый сервер): то же правило, что на сервере (llm/flow.ts). */
+function legacyRoute(tr: Triage): 'canned' | 'clarify' | 'next' {
+  if (tr.canned) return 'canned';
+  // Срочное с обходным путём — без вопросов; иначе — только по недостающему
+  if (tr.missing.length && !(tr.urgency === 'critical' && tr.mode === 'steps')) return 'clarify';
+  return 'next';
 }
 
 // ——— Без ИИ: частые вопросы и специалист (ТЗ v4.1, п. 13.8) ———
@@ -224,6 +239,13 @@ async function offlineStart(id: string, again = false): Promise<void> {
   if (!t) return;
   if (!S().messages[id]?.length) S().addMessage(id, { role: 'user', content: t.title });
   await moveTo(id, 'clarify');
+  // без ИИ готовый ответ организации — только при сильном совпадении слов (ТЗ v4.25)
+  try {
+    const r = await answersApi.match(userText(id));
+    if (r.answer) return showOrgAnswer(id, r.answer);
+  } catch {
+    /* сервер не ответил — остаются частые вопросы */
+  }
   S().addMessage(id, {
     role: 'assistant',
     kind: 'faq',
@@ -238,6 +260,33 @@ async function offlineStart(id: string, again = false): Promise<void> {
     pendingQuestions: 0,
     errorMessage: null,
     preview: 'ИИ недоступен — выберите частый вопрос или передайте специалисту',
+  });
+}
+
+/**
+ * Готовый ответ организации (ТЗ v4.25): дословно, со ссылками, с пометкой «Ответ организации»;
+ * дальше — «Закрыть вопрос / Не помогло» (после «Не помогло» ИИ продолжает разговор).
+ */
+async function showOrgAnswer(id: string, view: CannedView): Promise<void> {
+  S().addMessage(id, {
+    role: 'assistant',
+    kind: 'org',
+    content: view.body,
+    org: view,
+    model: null,
+  });
+  await moveTo(id, 'review');
+  S().patchTask(id, {
+    orgAnswerId: view.id,
+    orgFeedback: false,
+    status: 'awaiting_user',
+    checkpoint: 'review',
+    pendingQuestions: 1,
+    questions: null,
+    replyOptions: null,
+    reviewButtons: null,
+    errorMessage: null,
+    preview: `Ответ организации: ${view.title}`,
   });
 }
 
@@ -364,14 +413,23 @@ async function proceed(id: string): Promise<void> {
   // «самому не решить» — не передаём молча, а спрашиваем (ТЗ v4.21)
   if (mode === 'escalate') {
     await moveTo(id, 'working');
-    return offerSpecialist(id, 'Самостоятельно эту проблему не решить', {
-      say: 'Похоже, тут без специалиста не обойтись: самому это не исправить. Передать ему обращение? Он получит короткую сводку — пересказывать ничего не придётся.',
-    });
+    // правило организации «Сразу к специалисту» (ТЗ v4.26): пояснение администратора, согласие — как всегда;
+    // текст предложения готовит сервер (ТЗ v4.27) — тот же, что показывает прогон проверочных вопросов
+    const rule = t.triage?.rules?.find((r) => r.action === 'specialist');
+    return offerSpecialist(
+      id,
+      rule ? `Правило организации: «${rule.phrase}»` : 'Самостоятельно эту проблему не решить',
+      {
+        say:
+          t.triage?.offer ||
+          'Похоже, тут без специалиста не обойтись: самому это не исправить. Передать ему обращение? Он получит короткую сводку — пересказывать ничего не придётся.',
+      },
+    );
   }
-  if (mode === 'steps') return solve(id);
   // карточка без разбора (старые данные) — сначала разбор, как у всех (единая инструкция, ТЗ v4.13)
   if (!t.triage) return start(id);
-  // вопрос (answer) и заявка (request): ответ по существу; этап после него — по оценке ответа
+  // вопрос, заявка и проблема: ответ по существу обычным сообщением — без пошаговых окон (ТЗ v4.24);
+  // этап после него — по оценке ответа
   return run(id, 'answer');
 }
 
@@ -386,210 +444,6 @@ function showHint(id: string) {
       'Если захотите поговорить с человеком — кнопка «Позвать специалиста» всегда внизу, под полем ввода.',
   });
   S().patchTask(id, { hintShown: true });
-}
-
-// ——— 3. Решение по шагам ———
-
-/** Шаг в переписке — обычным текстом, как сказал бы человек рядом. */
-function stepProse(step: PlanStep, n: number, total: number): string {
-  const head = total > 1 ? `**Шаг ${n} из ${total}. ${step.title}.**` : `**${step.title}.**`;
-  return [head, step.instruction].filter(Boolean).join(' ');
-}
-
-const stepPreview = (plan: PlanStep[], i: number) =>
-  plan.length > 1 ? `Шаг ${i + 1} из ${plan.length}: ${plan[i]!.title}` : plan[i]!.title;
-
-/** Сценарий решения: один шаг — простым текстом, несколько — компактный чек-лист (ТЗ v4.21). */
-export async function solve(id: string): Promise<void> {
-  const t = task(id);
-  if (!t) return;
-  const attempt = t.attempts + 1;
-  const signal = begin(id);
-  await moveTo(id, 'working');
-  S().patchTask(id, {
-    status: 'awaiting_ai',
-    checkpoint: null,
-    pendingQuestions: 0,
-    errorMessage: null,
-    preview:
-      attempt > 1
-        ? 'Думаю, что ещё можно сделать…'
-        : urgent(id)
-          ? 'Ищу самый быстрый обходной путь…'
-          : 'Думаю, с чего начать…',
-    lastStep: 'steps',
-  });
-  try {
-    const r = await api.steps(history(id), urgent(id), attempt, model(), signal);
-    if (signal.aborted) return;
-    end(id, signal);
-    if (!r.self_solvable || !r.steps.length) {
-      const why = r.escalate_reason || 'Самостоятельно не решить';
-      return offerSpecialist(id, why, {
-        say: `${r.intro && r.intro !== 'Пройдём по шагам.' ? `${r.intro} ` : ''}Похоже, самому это не исправить: ${lower(why)}. Передать обращение специалисту? Он получит короткую сводку — пересказывать ничего не придётся.`,
-      });
-    }
-    const plan: PlanStep[] = r.steps.map((s) => ({
-      title: s.title,
-      instruction: s.instruction,
-      check: s.check,
-      done: false,
-    }));
-    S().addMessage(id, { role: 'assistant', kind: 'steps', content: r.intro, steps: r.steps });
-    S().patchTask(id, {
-      attempts: attempt,
-      stepIndex: 0,
-      plan,
-      status: 'awaiting_user',
-      checkpoint: 'step',
-      pendingQuestions: 1,
-      preview: stepPreview(plan, 0),
-    });
-  } catch (e) {
-    end(id, signal);
-    fail(id, 'steps', e);
-  }
-}
-
-const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, '');
-
-/**
- * Ответ человека на шаг своими словами (ТЗ v4.21): ИИ понимает, что произошло, и отвечает
- * живой реакцией; без модели — разбор по словам.
- */
-async function stepAnswer(id: string, text: string): Promise<void> {
-  const t = task(id);
-  if (!t?.plan || t.checkpoint !== 'step') return;
-  const index = t.stepIndex;
-  if (!t.plan[index]) return;
-  S().addMessage(id, { role: 'user', content: text });
-  S().patchTask(id, {
-    status: 'awaiting_ai',
-    checkpoint: null,
-    pendingQuestions: 0,
-    errorMessage: null,
-    preview: 'Читаю ваш ответ…',
-    lastStep: 'step-reply',
-  });
-  let r: StepReplyResult | null = null;
-  if (aiAvailable()) {
-    const signal = begin(id);
-    try {
-      r = await api.stepReply(history(id), t.plan, index, urgent(id), model(), signal);
-    } catch {
-      // модель ошиблась или не ответила — разбираем по словам, шагов не выдумываем
-    }
-    if (signal.aborted) return;
-    end(id, signal);
-  }
-  return applyStepReply(id, index, text, r ?? localStepReply(text, t.plan, index));
-}
-
-async function applyStepReply(
-  id: string,
-  index: number,
-  text: string,
-  reply: StepReplyResult,
-): Promise<void> {
-  const t = task(id);
-  if (!t?.plan) return;
-  let r = reply;
-  // переспрос по кругу (ТЗ v4.23): тот же вопрос шага, хотя человек ответил, или второй переспрос
-  // на том же шаге — идём дальше по плану, без вопросов
-  const norm = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^а-яёa-z0-9]+/g, ' ')
-      .trim();
-  const repeatsCheck = !!t.plan[index]?.check && norm(r.reply) === norm(t.plan[index]!.check!);
-  if (r.outcome === 'ask' && ((repeatsCheck && !isBareAck(text)) || t.askedStep === index))
-    r = { outcome: 'done', reply: withoutQuestions(r.reply), step: null };
-  const say = (content: string) =>
-    content.trim() && S().addMessage(id, { role: 'assistant', content, reaction: true });
-  const waitStep = (plan: PlanStep[], i: number) =>
-    S().patchTask(id, {
-      plan,
-      stepIndex: i,
-      status: 'awaiting_user',
-      checkpoint: 'step',
-      pendingQuestions: 1,
-      preview: stepPreview(plan, i),
-    });
-  const mark = (result: 'ok' | 'fail') =>
-    t.plan!.map((p, i) =>
-      i === index ? { ...p, done: result === 'ok', result, answer: text.slice(0, 300) } : p,
-    );
-
-  switch (r.outcome) {
-    case 'ask': {
-      say(r.reply || 'Что получилось в итоге?');
-      S().patchTask(id, {
-        status: 'awaiting_user',
-        checkpoint: 'step',
-        askedStep: index,
-        pendingQuestions: 1,
-        preview: short(r.reply || 'Что получилось в итоге?', 110),
-      });
-      return;
-    }
-    case 'solved': {
-      S().patchTask(id, { plan: mark('ok') });
-      say(r.reply || 'Отлично, рад, что всё заработало!');
-      return accept(id);
-    }
-    case 'done': {
-      const plan = mark('ok');
-      const next = index + 1;
-      if (next < plan.length) {
-        say([r.reply, stepProse(plan[next]!, next + 1, plan.length)].filter(Boolean).join('\n\n'));
-        return waitStep(plan, next);
-      }
-      say(r.reply || 'Все шаги пройдены.');
-      S().patchTask(id, { plan, stepIndex: next });
-      await moveTo(id, 'review');
-      S().patchTask(id, {
-        status: 'awaiting_user',
-        checkpoint: 'review',
-        pendingQuestions: 1,
-        preview: 'Все шаги пройдены. Всё в порядке?',
-      });
-      return;
-    }
-    case 'specialist': {
-      say(r.reply);
-      return offerSpecialist(id, 'Помощник считает, что нужен специалист', { asked: !!r.reply });
-    }
-    case 'failed':
-    case 'other': {
-      const failures = (t.failures ?? 0) + 1;
-      let plan = mark('fail');
-      const next = index + 1;
-      // новый шаг — в тот же план, сразу после неудачного (ТЗ v4.21)
-      if (r.step)
-        plan = [
-          ...plan.slice(0, next),
-          { ...r.step, done: false, added: true },
-          ...plan.slice(next),
-        ];
-      S().patchTask(id, { failures });
-      if (next >= plan.length) {
-        // идей больше нет — честно предлагаем специалиста
-        S().patchTask(id, { plan, stepIndex: next });
-        say(r.reply);
-        return offerSpecialist(
-          id,
-          aiAvailable() ? 'Шаги не помогли' : 'Шаги не помогли, ИИ недоступен',
-          {
-            say: 'Больше идей, что можно сделать самому, у меня нет. Передать обращение специалисту? Он увидит, что вы уже пробовали.',
-          },
-        );
-      }
-      say([r.reply, stepProse(plan[next]!, next + 1, plan.length)].filter(Boolean).join('\n\n'));
-      waitStep(plan, next);
-      if (shouldOffer(id)) return offerSpecialist(id, `${failures} шага не помогли`);
-      return;
-    }
-  }
 }
 
 /** Пора ли предложить специалиста: 2 неудачи, а после отказа — ещё 2. */
@@ -648,32 +502,17 @@ export async function declineOffer(id: string, text?: string): Promise<void> {
     checkpoint: null,
     pendingQuestions: 0,
   });
-  const step = t.plan?.[t.stepIndex];
-  // ответил своими словами — продолжаем разговор: как ответ на шаг, реплику или (без ИИ) поиск инструкций
+  // ответил своими словами — продолжаем разговор: реплика помощнику или (без ИИ) поиск инструкций
   if (text) {
     S().patchTask(id, {
       status: 'awaiting_user',
-      checkpoint: step && !step.result ? 'step' : aiAvailable() ? 'ask' : 'faq',
+      checkpoint: aiAvailable() ? 'ask' : 'faq',
       pendingQuestions: 1,
       replyOptions: null,
     });
     return reply(id, text);
   }
   S().addMessage(id, { role: 'user', content: label });
-  if (step && !step.result) {
-    S().addMessage(id, {
-      role: 'assistant',
-      reaction: true,
-      content: `Хорошо, продолжаем. ${step.check || 'Напишите, как пройдёт шаг.'}`,
-    });
-    S().patchTask(id, {
-      status: 'awaiting_user',
-      checkpoint: 'step',
-      pendingQuestions: 1,
-      preview: stepPreview(t.plan!, t.stepIndex),
-    });
-    return;
-  }
   await ensureStatus();
   if (!aiAvailable()) return offlineStart(id, true);
   const ask =
@@ -690,8 +529,8 @@ export async function declineOffer(id: string, text?: string): Promise<void> {
 }
 
 /**
- * «Не помогло» в Проверке (или «Доработать» у обращения-проблемы): помощник реагирует и предлагает
- * ещё одно действие в том же плане; специалиста — только предлагает (ТЗ v4.21).
+ * «Не помогло» в Проверке (или «Доработать» у обращения-проблемы): помощник продолжает разговор
+ * обычным ответом (ТЗ v4.24 — без пошаговых окон); после 2 неудач — предлагает специалиста.
  */
 export async function notSolved(id: string, detail?: string): Promise<void> {
   const t = task(id);
@@ -699,6 +538,12 @@ export async function notSolved(id: string, detail?: string): Promise<void> {
   const text = detail?.trim() ? detail.trim() : 'Не помогло';
   S().addMessage(id, { role: 'user', content: text });
   if (t.escalation) return backToSpecialist(id);
+  // готовый ответ организации не помог — администратор увидит это в статистике (один раз)
+  if (t.orgAnswerId && !t.orgFeedback) {
+    void answersApi.feedback(t.orgAnswerId, false).catch(() => {});
+    S().patchTask(id, { orgFeedback: true });
+  }
+  offerReview(id, 'not_helped', detail?.trim() ?? '');
   const failures = (t.failures ?? 0) + 1;
   S().patchTask(id, { failures, checkpoint: null, pendingQuestions: 0 });
   await ensureStatus();
@@ -714,63 +559,43 @@ export async function notSolved(id: string, detail?: string): Promise<void> {
       say: 'Жаль, что пока не получилось. Могу передать обращение специалисту — он увидит всё, что вы уже пробовали. Или продолжим вместе?',
     });
   }
-  const plan = t.plan;
-  if (!plan?.length) return run(id, 'answer');
-  // все шаги пройдены, а проблема осталась — одно новое действие в конец плана
-  const index = plan.length - 1;
-  const signal = begin(id);
-  await moveTo(id, 'working');
-  S().patchTask(id, {
-    status: 'awaiting_ai',
-    preview: 'Думаю, что ещё можно сделать…',
-    lastStep: 'step-reply',
+  return run(id, 'answer');
+}
+
+/**
+ * Разбор ошибок (ТЗ v4.29): после «Не помогло» / «Доработать» — предложить показать администратору
+ * этот ответ. Ничего не уходит без нажатия; уходят только вопрос и этот ответ. Один раз на ответ.
+ */
+function offerReview(id: string, reason: 'not_helped' | 'rework', note: string) {
+  const msgs = S().messages[id] ?? [];
+  const answer = [...msgs]
+    .reverse()
+    .find(
+      (m) =>
+        m.role === 'assistant' &&
+        (!m.kind || m.kind === 'text' || m.kind === 'org') &&
+        !m.reaction &&
+        !m.canned &&
+        m.content.trim(),
+    );
+  if (!answer || msgs.some((m) => m.review?.answerId === answer.id)) return;
+  const question = msgs.find((m) => m.role === 'user')?.content ?? task(id)?.title ?? '';
+  if (!question.trim()) return;
+  S().addMessage(id, {
+    role: 'assistant',
+    kind: 'review',
+    content: '',
+    review: { answerId: answer.id, question, answer: answer.content, reason, note, sent: false },
   });
-  let r: StepReplyResult | null = null;
-  try {
-    r = await api.stepReply(history(id), plan, index, urgent(id), model(), signal);
-  } catch {
-    r = null;
-  }
-  if (signal.aborted) return;
-  end(id, signal);
-  const say = (content: string) =>
-    content.trim() && S().addMessage(id, { role: 'assistant', content, reaction: true });
-  if (r?.step && (r.outcome === 'failed' || r.outcome === 'other')) {
-    const next: PlanStep[] = [...plan, { ...r.step, done: false, added: true }];
-    say([r.reply, stepProse(next.at(-1)!, next.length, next.length)].filter(Boolean).join('\n\n'));
-    S().patchTask(id, {
-      plan: next,
-      stepIndex: next.length - 1,
-      status: 'awaiting_user',
-      checkpoint: 'step',
-      pendingQuestions: 1,
-      preview: stepPreview(next, next.length - 1),
-    });
-    return;
-  }
-  if (r?.outcome === 'solved') {
-    say(r.reply);
-    return accept(id);
-  }
-  if (r?.reply && r.outcome === 'ask') {
-    say(r.reply);
-    S().patchTask(id, {
-      status: 'awaiting_user',
-      checkpoint: 'ask',
-      pendingQuestions: 1,
-      replyOptions: null,
-      askText: short(r.reply, 110),
-      preview: short(r.reply, 110),
-    });
-    return;
-  }
-  if (r?.reply) say(r.reply);
-  return offerSpecialist(id, 'Шаги не помогли', {
-    say: r?.reply
-      ? undefined
-      : 'Больше идей, что можно сделать самому, у меня нет. Передать обращение специалисту? Он увидит, что вы уже пробовали.',
-    asked: !!r?.reply,
-  });
+}
+
+/** «Показать администратору»: вопрос и ответ уходят на разбор. */
+export async function sendReview(id: string, messageId: string): Promise<void> {
+  const m = (S().messages[id] ?? []).find((x) => x.id === messageId);
+  if (!m?.review || m.review.sent) return;
+  const { question, answer, reason, note } = m.review;
+  await reviewsApi.send({ question, answer, reason, note });
+  S().patchMessage(id, messageId, { review: { ...m.review, sent: true } });
 }
 
 /** «Закрыть вопрос» (ТЗ v4.23; было «Решено»). */
@@ -796,6 +621,24 @@ function setEscalation(id: string, status: EscalationStatus, patch: Partial<Esca
       rev: (t.escalation.rev ?? 0) + 1,
     },
   });
+}
+
+/** Для специалиста: какой готовый ответ организации человек уже видел (ТЗ v4.25). */
+function orgNote(id: string): string {
+  const t = task(id);
+  if (!t?.orgAnswerId) return '';
+  const m = (S().messages[id] ?? []).find((x) => x.kind === 'org' && x.org?.id === t.orgAnswerId);
+  const title = m?.org?.title ?? 'готовый ответ';
+  return `Показан готовый ответ организации «${title}»${t.orgFeedback ? ' — не помог' : ''}.`;
+}
+
+/** Для специалиста: какие правила организации сработали на обращении (ТЗ v4.26). */
+function rulesNote(id: string): string {
+  const list = task(id)?.triage?.rules ?? [];
+  if (!list.length) return '';
+  return `Сработали правила организации: ${list
+    .map((r) => `${RULE_ACTION_LABELS[r.action].toLowerCase()} — «${r.phrase}»`)
+    .join('; ')}.`;
 }
 
 /** Детерминированная часть сводки — прямо из переписки (не зависит от модели). */
@@ -851,7 +694,12 @@ export async function escalate(
       hypothesis: r.hypothesis || t.triage?.summary || '',
       actions: base.actions.length ? base.actions : r.actions,
       result: r.result,
-      notes: [t.triage?.urgency === 'critical' ? `Срочно: ${t.triage.urgency_reason}` : '', r.notes]
+      notes: [
+        t.triage?.urgency === 'critical' ? `Срочно: ${t.triage.urgency_reason}` : '',
+        rulesNote(id),
+        orgNote(id),
+        r.notes,
+      ]
         .filter(Boolean)
         .join(' '),
     };
@@ -868,6 +716,7 @@ export async function escalate(
           ? 'ИИ был недоступен — сводка собрана из переписки без анализа.'
           : (t.triage?.urgency_reason ?? ''),
     };
+    handoff.notes = [handoff.notes, rulesNote(id), orgNote(id)].filter(Boolean).join(' ');
   } finally {
     end(id, signal);
   }
@@ -1310,6 +1159,7 @@ export async function rework(id: string, note: string): Promise<void> {
   const t = task(id);
   if (t?.triage?.mode === 'steps' || t?.escalation) return notSolved(id, note.trim());
   S().addMessage(id, { role: 'user', content: note.trim() });
+  offerReview(id, 'rework', note.trim());
   return run(id, 'answer');
 }
 
@@ -1416,8 +1266,7 @@ export async function reply(id: string, text: string): Promise<void> {
   // шаг, вопрос уточнения, встречный вопрос или проверка остаются на месте (ТЗ v4.15)
   if (
     t.status === 'awaiting_user' &&
-    (t.checkpoint === 'step' ||
-      t.checkpoint === 'questions' ||
+    (t.checkpoint === 'questions' ||
       t.checkpoint === 'ask' ||
       t.checkpoint === 'plan' ||
       t.checkpoint === 'review') &&
@@ -1448,7 +1297,12 @@ export async function reply(id: string, text: string): Promise<void> {
     return run(id, 'answer');
   }
 
-  if (t.checkpoint === 'step') return stepAnswer(id, clean);
+  if (t.checkpoint === 'step') {
+    // обращение из версии с пошаговыми окнами (до v4.24): ответ на шаг — обычная реплика
+    S().addMessage(id, { role: 'user', content: clean });
+    S().patchTask(id, { checkpoint: null, pendingQuestions: 0 });
+    return run(id, 'answer');
+  }
 
   if (t.checkpoint === 'offer') {
     const want = t.offer?.continueLabel ?? 'Продолжить с ИИ';
@@ -1532,26 +1386,13 @@ export async function retry(id: string): Promise<void> {
       return askQuestions(id);
     case 'plan':
       return makePlan(id);
-    case 'steps':
-      return solve(id);
     case 'handoff':
       return escalate(id);
-    case 'step-reply': {
-      // ответ на шаг прервали — просто ждём его снова
-      const plan = t.plan ?? [];
-      if (plan[t.stepIndex]) {
-        S().patchTask(id, {
-          status: 'awaiting_user',
-          checkpoint: 'step',
-          pendingQuestions: 1,
-          errorMessage: null,
-          preview: stepPreview(plan, t.stepIndex),
-        });
-        return;
-      }
-      return run(id, 'answer');
-    }
+    // шаги и ответ на шаг (до v4.24) — теперь обычный ответ
+    case 'steps':
+    case 'step-reply':
     case 'answer':
+      return run(id, 'answer');
     case 'execute':
       return run(id, t.lastStep);
     default:

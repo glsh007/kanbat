@@ -23,8 +23,10 @@ export function AppShell({ title, subtitle, actions, wallpaper = false, children
   const [navOpen, setNavOpen] = useState(false);
   const closeNav = useCallback(() => setNavOpen(false), []);
 
+  // overflow-clip: каркас нельзя прокрутить даже программно (фокус на скрытом поле, v4.29.1) —
+  // иначе содержимое уезжает за край и экран остаётся пустым
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-hidden supports-[overflow:clip]:overflow-clip">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-control focus:bg-surface focus:px-3 focus:py-2 focus:shadow-raised"

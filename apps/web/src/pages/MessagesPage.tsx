@@ -6,6 +6,7 @@ import {
   type DmMessageView,
   type DmProfile,
 } from '@app/shared';
+import { isSendKey } from '@/lib/keys';
 import {
   Archive,
   ArrowLeft,
@@ -47,6 +48,7 @@ import { cn } from '@/lib/cn';
 import { formatDate, plural, timeAgo } from '@/lib/format';
 import { usePanelWidth } from '@/lib/panelWidth';
 import { useNow } from '@/lib/useNow';
+import { brandWords } from '@/brand/orgBrand';
 
 /**
  * Бат-общение (ТЗ v4.19, п. 18): не мессенджер, а личный вопрос по теме Бат-Форума тому, кто в ней
@@ -64,7 +66,7 @@ export function MessagesPage() {
   const [archive, setArchive] = useState<DmArchiveCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const listWidth = usePanelWidth('dm-list', 340, 260, 560);
-  useNavTitle(archiveTab ? 'архив Бат-общения' : 'Бат-общение');
+  useNavTitle(archiveTab ? `архив ${brandWords().dmGen}` : brandWords().dm);
 
   const load = useCallback(async () => {
     try {
@@ -89,8 +91,8 @@ export function MessagesPage() {
 
   return (
     <AppShell
-      title="Бат-общение"
-      subtitle="Личные вопросы по темам Бат-Форума — видите только вы и собеседник"
+      title={brandWords().dm}
+      subtitle={`Личные вопросы по темам ${brandWords().forumGen} — видите только вы и собеседник`}
     >
       <div className="flex h-full min-h-0">
         <aside
@@ -102,7 +104,7 @@ export function MessagesPage() {
           )}
         >
           <nav
-            aria-label="Разделы Бат-общения"
+            aria-label={`Разделы ${brandWords().dmGen}`}
             className="grid grid-cols-2 gap-1 rounded-control border border-line bg-sunken p-0.5"
           >
             <TabLink to="/messages" active={!archiveTab} icon={<MessagesSquare size={16} />}>
@@ -136,14 +138,14 @@ export function MessagesPage() {
             <div className="m-auto flex max-w-sm flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted">
               <MessageCircleQuestion size={32} aria-hidden className="opacity-60" />
               <p>
-                Здесь личные вопросы по темам Бат-Форума. Нашли тему со своей проблемой — нажмите
-                «Спросить лично» у ответа того, кто знает решение.
+                Здесь личные вопросы по темам {brandWords().forumGen}. Нашли тему со своей проблемой
+                — нажмите «Спросить лично» у ответа того, кто знает решение.
               </p>
               <Link
                 to="/forum"
                 className="font-medium text-fg underline underline-offset-4 hover:text-heading"
               >
-                Открыть Бат-Форум
+                Открыть {brandWords().forum}
               </Link>
             </div>
           )}
@@ -194,8 +196,8 @@ function ChatList({ chats, activeId }: { chats: DmChatCard[] | null; activeId: s
   if (!chats.length)
     return (
       <p className="text-sm text-fg-muted">
-        Открытых переписок нет. Задать личный вопрос можно в теме Бат-Форума — кнопкой «Спросить
-        лично» у ответа. Закрытые переписки — в архиве.
+        Открытых переписок нет. Задать личный вопрос можно в теме {brandWords().forumGen} — кнопкой
+        «Спросить лично» у ответа. Закрытые переписки — в архиве.
       </p>
     );
   const incoming = chats.filter((c) => c.status === 'pending' && c.role === 'helper');
@@ -634,7 +636,7 @@ function ChatView({
                   maxLength={2000}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (isSendKey(e)) {
                       e.preventDefault();
                       void send();
                     }

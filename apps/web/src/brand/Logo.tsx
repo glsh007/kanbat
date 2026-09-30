@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { cn } from '@/lib/cn';
 import { BRAND } from './brand';
+import { useOrgBrand } from './orgBrand';
 import {
   MARK_BAR,
   MARK_BODY,
@@ -29,6 +30,10 @@ export type LogoProps = {
    * breathe — ещё и «дышит» (для трудных задач). При prefers-reduced-motion — неподвижна.
    */
   animate?: 'swing' | 'breathe';
+  /** Всегда стандартный знак Канбата, даже если у организации своё оформление (стенд дизайна). */
+  standard?: boolean;
+  /** Под логотипом организации — «Работает на Канбате» (только variant="full"). */
+  poweredBy?: boolean;
 };
 
 /**
@@ -43,7 +48,117 @@ export function Logo({
   className,
   decorative = false,
   animate,
+  standard = false,
+  poweredBy = false,
 }: LogoProps) {
+  const org = useOrgBrand();
+  if (!standard && variant === 'full' && org.logo)
+    return (
+      <OrgLogo
+        src={org.logo}
+        name={org.orgName}
+        size={size}
+        className={className}
+        decorative={decorative}
+        poweredBy={poweredBy}
+      />
+    );
+  if (!standard && variant === 'mark' && org.mark)
+    return (
+      <OrgMark
+        src={org.mark}
+        name={org.orgName}
+        size={size}
+        className={className}
+        decorative={decorative}
+        animate={!!animate}
+      />
+    );
+  return (
+    <KanbatLogo
+      variant={variant}
+      tone={tone}
+      size={size}
+      className={className}
+      decorative={decorative}
+      animate={animate}
+    />
+  );
+}
+
+/**
+ * Логотип организации (ТЗ v4.28): картинка администратора; в тёмной теме — на светлой подложке.
+ * Рядом мелко — «Работает на Канбате».
+ */
+function OrgLogo({
+  src,
+  name,
+  size,
+  className,
+  decorative,
+  poweredBy,
+}: {
+  src: string;
+  name: string;
+  size: number;
+  className?: string;
+  decorative: boolean;
+  poweredBy: boolean;
+}) {
+  return (
+    <span className={cn('inline-flex min-w-0 flex-col items-start gap-0.5', className)}>
+      <img
+        src={src}
+        alt={decorative ? '' : name || 'Логотип организации'}
+        style={{ height: size, maxWidth: size * 6 }}
+        className="org-plate box-content object-contain object-left"
+      />
+      {poweredBy && (
+        <span className="text-[11px] leading-none text-fg-muted">Работает на {BRAND.name}е</span>
+      )}
+    </span>
+  );
+}
+
+/** Значок организации вместо летучей мыши; «думает» — только медленно сужается и расширяется. */
+function OrgMark({
+  src,
+  name,
+  size,
+  className,
+  decorative,
+  animate,
+}: {
+  src: string;
+  name: string;
+  size: number;
+  className?: string;
+  decorative: boolean;
+  animate: boolean;
+}) {
+  return (
+    <span className={cn('inline-flex shrink-0', className)}>
+      <img
+        src={src}
+        alt={decorative ? '' : name || 'Значок организации'}
+        width={size}
+        height={size}
+        className={cn('org-plate-mark box-border object-contain', animate && 'org-breathe')}
+        style={{ width: size, height: size }}
+      />
+    </span>
+  );
+}
+
+/** Стандартный логотип Канбата. */
+function KanbatLogo({
+  variant = 'full',
+  tone = 'color',
+  size = 28,
+  className,
+  decorative = false,
+  animate,
+}: Omit<LogoProps, 'standard' | 'poweredBy'>) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const titleId = `logo-title-${uid}`;
   const maskId = `logo-cut-${uid}`;

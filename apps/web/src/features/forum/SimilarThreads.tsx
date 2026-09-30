@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { forumApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { brandWords } from '@/brand/orgBrand';
 
 /**
  * «Похожие обсуждения на Бат-Форуме» — подсказка по тексту обращения:
@@ -34,7 +35,7 @@ export function SimilarThreads({ text, className }: { text: string; className?: 
   if (!items.length) return null;
   return (
     <section
-      aria-label="Похожие обсуждения на Бат-Форуме"
+      aria-label={`Похожие обсуждения на ${brandWords().forumPrep}`}
       className={cn(
         'flex flex-col gap-1.5 rounded-card border border-line bg-surface p-3',
         className,
@@ -42,7 +43,7 @@ export function SimilarThreads({ text, className }: { text: string; className?: 
     >
       <h3 className="flex items-center gap-1.5 text-sm font-medium text-heading">
         <MessagesSquare size={16} aria-hidden />
-        Похожие обсуждения на Бат-Форуме
+        Похожие обсуждения на {brandWords().forumPrep}
       </h3>
       <ul className="flex flex-col">
         {items.map((t) => (

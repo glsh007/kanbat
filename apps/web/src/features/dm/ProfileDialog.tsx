@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { dmApi } from '@/lib/api';
 import { useDm } from './store';
+import { brandWords } from '@/brand/orgBrand';
 
 /**
  * Профиль человека: имя, @ник, роль, аватарка. Написать отсюда нельзя (ТЗ v4.19): личный
@@ -79,8 +80,8 @@ export function ProfileDialog() {
           ) : (
             <p className="text-sm text-fg-muted">
               {view.open
-                ? 'Задать личный вопрос можно в теме Бат-Форума, где человек отвечал, — кнопкой «Спросить лично».'
-                : 'Сейчас не принимает личные вопросы — спросите в теме Бат-Форума.'}
+                ? `Задать личный вопрос можно в теме ${brandWords().forumGen}, где человек отвечал, — кнопкой «Спросить лично».`
+                : `Сейчас не принимает личные вопросы — спросите в теме ${brandWords().forumGen}.`}
             </p>
           )}
         </div>

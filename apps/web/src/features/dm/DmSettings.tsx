@@ -1,6 +1,7 @@
 import type { User } from '@app/shared';
 import { useEffect, useId, useState } from 'react';
 import { saveDmOff } from '@/lib/session';
+import { brandWords } from '@/brand/orgBrand';
 
 /** «Настройки» → «Бат-общение»: принимать ли личные вопросы по темам (ТЗ v4.19). */
 export function DmSettings({ user }: { user: User }) {
@@ -41,7 +42,7 @@ export function DmSettings({ user }: { user: User }) {
       </label>
       <p id={hintId} className="pl-6 text-xs text-fg-muted">
         {open
-          ? 'У ваших тем и ответов на Бат-Форуме есть кнопка «Спросить лично». Вопросы приходят в Бат-общение — не больше 3 в сутки; вы решаете, принимать ли каждый.'
+          ? `У ваших тем и ответов на ${brandWords().forumPrep} есть кнопка «Спросить лично». Вопросы приходят в ${brandWords().dmAcc} — не больше 3 в сутки; вы решаете, принимать ли каждый.`
           : 'Выключено: кнопки «Спросить лично» у ваших тем и ответов нет. Открытые переписки продолжаются до закрытия.'}
       </p>
       {error && (

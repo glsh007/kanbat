@@ -250,7 +250,7 @@ export function LoginPage() {
       <main className="flex flex-1 items-start justify-center px-4 pt-6 pb-12 sm:items-center sm:pt-0">
         <div className="w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3 text-center">
-            <Logo variant="full" size={40} />
+            <Logo variant="full" size={40} poweredBy />
             <p className="text-sm text-fg-muted">
               ИИ-помощник поддержки: каждое обращение — карточка на доске
             </p>
